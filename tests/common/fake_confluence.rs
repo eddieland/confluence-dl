@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
-use confluence_dl::confluence::{Attachment, ConfluenceApi, Page};
+use confluence_dl::confluence::{Attachment, ConfluenceApi, Page, UserInfo};
 
 use crate::common::fixtures;
 
@@ -116,9 +116,14 @@ impl ConfluenceApi for FakeConfluenceClient {
     Ok(())
   }
 
-  fn test_auth(&self) -> Result<()> {
+  fn test_auth(&self) -> Result<UserInfo> {
     if self.auth_should_succeed {
-      Ok(())
+      Ok(UserInfo {
+        account_id: "test-account-id".to_string(),
+        email: Some("test@example.com".to_string()),
+        display_name: "Test User".to_string(),
+        public_name: Some("Test User".to_string()),
+      })
     } else {
       Err(anyhow!("Authentication failed with status: 401"))
     }

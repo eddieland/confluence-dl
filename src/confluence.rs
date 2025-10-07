@@ -26,9 +26,8 @@ pub trait ConfluenceApi {
   /// Download an attachment by URL to a file
   fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()>;
 
-  /// Test authentication
-  #[allow(dead_code)]
-  fn test_auth(&self) -> Result<()>;
+  /// Test authentication and return user information
+  fn test_auth(&self) -> Result<UserInfo>;
 }
 
 /// Confluence API client
@@ -123,6 +122,18 @@ pub struct AttachmentsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChildPagesResponse {
   pub results: Vec<Page>,
+}
+
+/// User information from authentication test
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserInfo {
+  #[serde(rename = "accountId")]
+  pub account_id: String,
+  pub email: Option<String>,
+  #[serde(rename = "displayName")]
+  pub display_name: String,
+  #[serde(rename = "publicName")]
+  pub public_name: Option<String>,
 }
 
 /// Represents a page tree with hierarchical children
@@ -296,7 +307,7 @@ impl ConfluenceApi for ConfluenceClient {
     Ok(())
   }
 
-  fn test_auth(&self) -> Result<()> {
+  fn test_auth(&self) -> Result<UserInfo> {
     let url = format!("{}/wiki/rest/api/user/current", self.base_url);
 
     let response = self
@@ -309,10 +320,15 @@ impl ConfluenceApi for ConfluenceClient {
 
     if !response.status().is_success() {
       let status = response.status();
-      return Err(anyhow!("Authentication failed with status: {status}"));
+      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      return Err(anyhow!("Authentication failed with status {status}: {error_text}"));
     }
 
-    Ok(())
+    let user_info: UserInfo = response
+      .json()
+      .context("Failed to parse user information from Confluence API")?;
+
+    Ok(user_info)
   }
 }
 

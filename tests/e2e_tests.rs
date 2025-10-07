@@ -116,6 +116,12 @@ fn test_authentication_success() {
 
   let result = client.test_auth();
   assert!(result.is_ok());
+
+  let user_info = result.unwrap();
+  assert_eq!(user_info.account_id, "test-account-id");
+  assert_eq!(user_info.email, Some("test@example.com".to_string()));
+  assert_eq!(user_info.display_name, "Test User");
+  assert_eq!(user_info.public_name, Some("Test User".to_string()));
 }
 
 #[test]
@@ -128,6 +134,7 @@ fn test_authentication_failure() {
 
   let err = result.unwrap_err();
   assert!(err.to_string().contains("Authentication failed"));
+  assert!(err.to_string().contains("401"));
 }
 
 #[test]

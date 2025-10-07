@@ -57,31 +57,98 @@ fn main() {
 fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &ColorScheme) {
   match subcommand {
     AuthCommand::Test => {
-      println!("{}", colors.info("Testing authentication..."));
-      // TODO: Implement authentication testing
-      // 1. Load credentials from CLI args, env vars, or .netrc
-      // 2. Make test API call to Confluence
-      // 3. Display result with user info
-      println!(
-        "  {}: {}",
-        colors.emphasis("URL"),
-        colors.link(cli.auth.url.as_deref().unwrap_or("(not set)"))
-      );
-      println!(
-        "  {}: {}",
-        colors.emphasis("User"),
-        cli.auth.user.as_deref().unwrap_or("(not set)")
-      );
-      println!(
-        "  {}: {}",
-        colors.emphasis("Token"),
-        if cli.auth.token.is_some() {
-          colors.dimmed("********")
-        } else {
-          colors.dimmed("(not set)")
+      // Verify we have a base URL
+      let base_url = match &cli.auth.url {
+        Some(url) => url,
+        None => {
+          eprintln!("{} {}", colors.error("✗"), colors.error("Base URL not provided"));
+          eprintln!("\n{}", colors.info("Please provide the Confluence URL:"));
+          eprintln!("  confluence-dl auth test --url https://your-instance.atlassian.net");
+          eprintln!("  Or set CONFLUENCE_URL environment variable");
+          std::process::exit(1);
         }
-      );
-      eprintln!("{} Authentication testing not yet implemented", colors.warning("Note:"));
+      };
+
+      println!("{} {}", colors.info("→"), colors.info("Testing authentication"));
+      println!("  {}: {}", colors.emphasis("URL"), colors.link(base_url));
+
+      // Load credentials
+      let (username, token) = match load_credentials(base_url, cli) {
+        Ok(creds) => creds,
+        Err(e) => {
+          eprintln!("\n{} {}", colors.error("✗"), colors.error("Failed to load credentials"));
+          eprintln!("  {e}");
+          eprintln!("\n{}", colors.info("Setup instructions:"));
+          eprintln!(
+            "  1. Create an API token at: {}",
+            colors.link("https://id.atlassian.com/manage-profile/security/api-tokens")
+          );
+          eprintln!("  2. Provide credentials via:");
+          eprintln!("     • CLI flags: --user and --token");
+          eprintln!("     • Environment variables: CONFLUENCE_USER and CONFLUENCE_TOKEN");
+          eprintln!("     • ~/.netrc file");
+          std::process::exit(2);
+        }
+      };
+
+      println!("  {}: {}", colors.emphasis("Username"), username);
+
+      // Create client
+      let client = match confluence::ConfluenceClient::new(base_url, &username, &token, cli.performance.timeout) {
+        Ok(c) => c,
+        Err(e) => {
+          eprintln!(
+            "\n{} {}",
+            colors.error("✗"),
+            colors.error("Failed to create API client")
+          );
+          eprintln!("  {e}");
+          std::process::exit(1);
+        }
+      };
+
+      // Test authentication
+      println!("\n{} {}", colors.info("→"), colors.info("Calling Confluence API..."));
+      match client.test_auth() {
+        Ok(user_info) => {
+          println!(
+            "\n{} {}",
+            colors.success("✓"),
+            colors.success("Authentication successful!")
+          );
+          println!("\n{}", colors.emphasis("User Information:"));
+          println!("  {}: {}", colors.emphasis("Display Name"), user_info.display_name);
+          println!(
+            "  {}: {}",
+            colors.emphasis("Account ID"),
+            colors.dimmed(&user_info.account_id)
+          );
+          if let Some(email) = user_info.email {
+            println!("  {}: {}", colors.emphasis("Email"), email);
+          }
+          if let Some(public_name) = user_info.public_name {
+            println!("  {}: {}", colors.emphasis("Public Name"), public_name);
+          }
+          println!("\n{} Your credentials are working correctly.", colors.info("ℹ"));
+        }
+        Err(e) => {
+          eprintln!("\n{} {}", colors.error("✗"), colors.error("Authentication failed"));
+          eprintln!("  {e}");
+          eprintln!("\n{}", colors.info("Common issues:"));
+          eprintln!(
+            "  1. Invalid API token - verify at {}",
+            colors.link("https://id.atlassian.com/manage-profile/security/api-tokens")
+          );
+          eprintln!("  2. Incorrect username - should be your email address");
+          eprintln!("  3. Wrong base URL - should be https://your-instance.atlassian.net");
+          eprintln!("  4. Network connectivity issues");
+          eprintln!(
+            "\n{}",
+            colors.dimmed("Run 'confluence-dl auth show' to see your current configuration")
+          );
+          std::process::exit(2);
+        }
+      }
     }
     AuthCommand::Show => {
       show_auth_config(cli, colors);

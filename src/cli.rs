@@ -4,6 +4,7 @@
 //! commands and arguments according to the design in CLI_DESIGN.md.
 
 use clap::{Parser, Subcommand, ValueEnum};
+use url::Url;
 
 /// confluence-dl - Export Confluence pages to Markdown
 #[derive(Debug, Parser)]
@@ -97,11 +98,35 @@ pub enum Shell {
   Elvish,
 }
 
+/// Normalize a URL by adding https:// if no scheme is present
+fn normalize_url(url: &str) -> Result<String, String> {
+  let trimmed = url.trim();
+
+  // Try to parse the URL as-is
+  let parsed = match Url::parse(trimmed) {
+    Ok(parsed) => parsed,
+    Err(_) => {
+      // Failed to parse, likely missing scheme
+      // Try prepending https://
+      let with_https = format!("https://{trimmed}");
+      Url::parse(&with_https).map_err(|e| format!("Invalid URL: {e}"))?
+    }
+  };
+
+  // Convert to string and remove trailing slash if present
+  let mut url_str = parsed.to_string();
+  if url_str.ends_with('/') && url_str.len() > 1 {
+    url_str.pop();
+  }
+
+  Ok(url_str)
+}
+
 /// Authentication options
 #[derive(Debug, Parser)]
 pub struct AuthOptions {
   /// Confluence base URL
-  #[arg(long, env = "CONFLUENCE_URL", value_name = "URL")]
+  #[arg(long, env = "CONFLUENCE_URL", value_name = "URL", value_parser = normalize_url)]
   pub url: Option<String>,
 
   /// Confluence user email
@@ -224,7 +249,16 @@ pub struct PerformanceOptions {
 impl Cli {
   /// Parse CLI arguments from the environment
   pub fn parse_args() -> Self {
-    Self::parse()
+    let mut cli = Self::parse();
+
+    // Normalize URL: add https:// if no scheme is present
+    if let Some(url) = &cli.auth.url
+      && !url.contains("://")
+    {
+      cli.auth.url = Some(format!("https://{url}"));
+    }
+
+    cli
   }
 
   /// Validate CLI arguments
@@ -591,5 +625,65 @@ mod tests {
 
     let result = cli.validate();
     assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_url_normalization_adds_https_when_missing() {
+    // Create a CLI with a URL without a scheme
+    use clap::Parser;
+
+    let cli = Cli::try_parse_from(&["confluence-dl", "--url", "example.atlassian.net", "auth", "test"]).unwrap();
+
+    // URL should have https:// prepended
+    assert_eq!(cli.auth.url, Some("https://example.atlassian.net".to_string()));
+  }
+
+  #[test]
+  fn test_url_normalization_preserves_https_scheme() {
+    use clap::Parser;
+
+    let cli = Cli::try_parse_from(&[
+      "confluence-dl",
+      "--url",
+      "https://example.atlassian.net",
+      "auth",
+      "test",
+    ])
+    .unwrap();
+
+    // URL should remain unchanged
+    assert_eq!(cli.auth.url, Some("https://example.atlassian.net".to_string()));
+  }
+
+  #[test]
+  fn test_url_normalization_preserves_http_scheme() {
+    use clap::Parser;
+
+    let cli = Cli::try_parse_from(&["confluence-dl", "--url", "http://localhost:8080", "auth", "test"]).unwrap();
+
+    // URL should remain unchanged (http:// preserved for localhost testing)
+    assert_eq!(cli.auth.url, Some("http://localhost:8080".to_string()));
+  }
+
+  #[test]
+  fn test_url_normalization_from_env_var() {
+    use std::env;
+
+    use clap::Parser;
+
+    // Set the environment variable
+    unsafe {
+      env::set_var("CONFLUENCE_URL", "mycompany.atlassian.net");
+    }
+
+    let cli = Cli::try_parse_from(&["confluence-dl", "auth", "test"]).unwrap();
+
+    // URL from environment should have https:// prepended
+    assert_eq!(cli.auth.url, Some("https://mycompany.atlassian.net".to_string()));
+
+    // Clean up
+    unsafe {
+      env::remove_var("CONFLUENCE_URL");
+    }
   }
 }
