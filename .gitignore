@@ -20,5 +20,8 @@ target
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# Coverage
+lcov.info
+
 # Outputs from confluence-dl
 confluence-export/

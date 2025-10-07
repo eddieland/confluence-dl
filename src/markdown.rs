@@ -426,8 +426,10 @@ mod tests {
       </ac:task-list>
     "#;
     let output = storage_to_markdown(input).unwrap();
-    assert!(output.contains("[ ] Task 1"));
-    assert!(output.contains("[x] Task 2"));
+    insta::assert_snapshot!(output, @r###"
+    - [ ] Task 1
+    - [x] Task 2
+    "###);
   }
 
   #[test]
@@ -435,5 +437,268 @@ mod tests {
     let input = r#"<ac:image ac:alt="test image"><ri:url ri:value="https://example.com/image.png" /></ac:image>"#;
     let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("![test image](https://example.com/image.png)"));
+  }
+
+  #[test]
+  fn test_convert_table() {
+    let input = r#"
+      <table>
+        <tr><th>Header 1</th><th>Header 2</th></tr>
+        <tr><td>Row 1 Col 1</td><td>Row 1 Col 2</td></tr>
+        <tr><td>Row 2 Col 1</td><td>Row 2 Col 2</td></tr>
+      </table>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    insta::assert_snapshot!(output, @r###"
+    | Header 1 | Header 2 |
+    | --- | --- |
+    | Row 1 Col 1 | Row 1 Col 2 |
+    | Row 2 Col 1 | Row 2 Col 2 |
+    "###);
+  }
+
+  #[test]
+  fn test_convert_table_empty() {
+    let input = "<table></table>";
+    let output = storage_to_markdown(input).unwrap();
+    // Empty table should produce minimal output
+    assert!(!output.contains("|"));
+  }
+
+  #[test]
+  fn test_convert_lists() {
+    let input = r#"
+      <ul>
+        <li>Item 1</li>
+        <li>Item 2</li>
+      </ul>
+      <ol>
+        <li>First</li>
+        <li>Second</li>
+      </ol>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    insta::assert_snapshot!(output, @r"
+    - Item 1
+    - Item 2
+
+          
+    1. First
+    2. Second
+    ");
+  }
+
+  #[test]
+  fn test_convert_code_block() {
+    let input = "<pre>function test() {\n  return 42;\n}</pre>";
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("```"));
+    assert!(output.contains("function test()"));
+  }
+
+  #[test]
+  fn test_convert_inline_code() {
+    let input = "<p>Use <code>git commit</code> to save</p>";
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("`git commit`"));
+  }
+
+  #[test]
+  fn test_convert_horizontal_rule() {
+    let input = "<p>Before</p><hr /><p>After</p>";
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("---"));
+  }
+
+  #[test]
+  fn test_convert_line_break() {
+    let input = "<p>Line 1<br />Line 2</p>";
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("Line 1\nLine 2"));
+  }
+
+  #[test]
+  fn test_convert_macro_toc() {
+    let input = r#"<ac:structured-macro ac:name="toc"></ac:structured-macro>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("**Table of Contents**"));
+  }
+
+  #[test]
+  fn test_convert_macro_panel() {
+    let input = r#"
+      <ac:structured-macro ac:name="panel">
+        <ac:rich-text-body>
+          <p>Panel content here</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    insta::assert_snapshot!(output, @r###"
+    > Panel content here
+    "###);
+  }
+
+  #[test]
+  fn test_convert_macro_status() {
+    let input = r#"
+      <ac:structured-macro ac:name="status">
+        <ac:parameter ac:name="title">In Progress</ac:parameter>
+      </ac:structured-macro>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("`[In Progress]`"));
+  }
+
+  #[test]
+  fn test_convert_macro_expand() {
+    let input = r#"
+      <ac:structured-macro ac:name="expand">
+        <ac:parameter ac:name="title">Click to expand</ac:parameter>
+        <ac:rich-text-body>
+          <p>Hidden content</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    insta::assert_snapshot!(output, @r###"
+    <details>
+    <summary>Click to expand</summary>
+
+    Hidden content
+    </details>
+    "###);
+  }
+
+  #[test]
+  fn test_convert_macro_expand_default_title() {
+    let input = r#"
+      <ac:structured-macro ac:name="expand">
+        <ac:rich-text-body>
+          <p>Content without title</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("<summary>Details</summary>"));
+  }
+
+  #[test]
+  fn test_convert_macro_anchor() {
+    let input = r#"<ac:structured-macro ac:name="anchor"><ac:parameter ac:name="name">section1</ac:parameter></ac:structured-macro>"#;
+    let output = storage_to_markdown(input).unwrap();
+    // Anchor should produce empty output
+    assert!(!output.contains("anchor"));
+  }
+
+  #[test]
+  fn test_convert_macro_unknown() {
+    let input = r#"<ac:structured-macro ac:name="unknown-macro">Some text content</ac:structured-macro>"#;
+    let output = storage_to_markdown(input).unwrap();
+    // Unknown macros should extract text content
+    assert!(output.contains("Some text content"));
+  }
+
+  #[test]
+  fn test_convert_underline() {
+    let input = "<p><u>underlined text</u></p>";
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("_underlined text_"));
+  }
+
+  #[test]
+  fn test_convert_strikethrough() {
+    let input = "<p><s>strike</s> and <del>delete</del></p>";
+    let output = storage_to_markdown(input).unwrap();
+    insta::assert_snapshot!(output, @"~~strike~~ and ~~delete~~");
+  }
+
+  #[test]
+  fn test_convert_layout_sections() {
+    let input = r#"
+      <ac:layout>
+        <ac:layout-section>
+          <ac:layout-cell>
+            <p>Cell content</p>
+          </ac:layout-cell>
+        </ac:layout-section>
+      </ac:layout>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    insta::assert_snapshot!(output, @"Cell content");
+  }
+
+  #[test]
+  fn test_convert_rich_text_body() {
+    let input = r#"<ac:rich-text-body><p>Rich text</p></ac:rich-text-body>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("Rich text"));
+  }
+
+  #[test]
+  fn test_clean_markdown_removes_excessive_newlines() {
+    let input = "Line 1\n\n\n\n\nLine 2";
+    let output = clean_markdown(input);
+    assert!(!output.contains("\n\n\n"));
+    assert!(output.contains("Line 1\n\nLine 2"));
+  }
+
+  #[test]
+  fn test_clean_markdown_adds_trailing_newline() {
+    let input = "Some content";
+    let output = clean_markdown(input);
+    assert!(output.ends_with('\n'));
+  }
+
+  #[test]
+  fn test_clean_markdown_preserves_double_newlines() {
+    let input = "Paragraph 1\n\nParagraph 2";
+    let output = clean_markdown(input);
+    assert!(output.contains("Paragraph 1\n\nParagraph 2"));
+  }
+
+  #[test]
+  fn test_convert_image_without_url() {
+    let input = r#"<ac:image ac:alt="no url"></ac:image>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("![no url]()"));
+  }
+
+  #[test]
+  fn test_convert_image_without_alt() {
+    let input = r#"<ac:image><ri:url ri:value="https://example.com/img.png" /></ac:image>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("![image](https://example.com/img.png)"));
+  }
+
+  #[test]
+  fn test_convert_span_extracts_content() {
+    let input = "<p><span>Span content</span></p>";
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("Span content"));
+  }
+
+  #[test]
+  fn test_convert_empty_paragraph() {
+    let input = "<p></p><p>   </p>";
+    let output = storage_to_markdown(input).unwrap();
+    // Empty paragraphs should not produce extra newlines
+    assert!(!output.contains("\n\n\n"));
+  }
+
+  #[test]
+  fn test_get_element_text_recursive() {
+    let input = "<div><span>Nested <strong>text</strong> content</span></div>";
+    let document = Html::parse_document(input);
+    let div = document.select(&Selector::parse("div").unwrap()).next().unwrap();
+    let text = get_element_text(&div);
+    assert_eq!(text, "Nested text content");
+  }
+
+  #[test]
+  fn test_decode_all_entities() {
+    let input = "&nbsp;&rsquo;&lsquo;&rdquo;&ldquo;&mdash;&ndash;&amp;&lt;&gt;&quot;&rarr;&larr;&#39;";
+    let output = decode_html_entities(input);
+    assert_eq!(output, " ''\"\"—–&<>\"→←'");
   }
 }

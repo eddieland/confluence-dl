@@ -282,7 +282,7 @@ mod tests {
         token: None,
       },
       output: OutputOptions {
-        output: "./confluence-export".to_string(),
+        output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
       },
@@ -311,7 +311,13 @@ mod tests {
       },
     };
 
-    assert!(cli.validate().is_err());
+    let result = cli.validate();
+    assert!(result.is_err());
+    assert!(
+      result
+        .unwrap_err()
+        .contains("provide a page URL/ID or use a subcommand")
+    );
   }
 
   #[test]
@@ -325,7 +331,7 @@ mod tests {
         token: None,
       },
       output: OutputOptions {
-        output: "./confluence-export".to_string(),
+        output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
       },
@@ -354,6 +360,236 @@ mod tests {
       },
     };
 
-    assert!(cli.validate().is_err());
+    let result = cli.validate();
+    assert!(result.is_err());
+    assert!(
+      result
+        .unwrap_err()
+        .contains("--url is required when using a numeric page ID")
+    );
+  }
+
+  #[test]
+  fn test_cli_validation_max_depth_requires_children() {
+    let cli = Cli {
+      page_input: Some("https://example.com/page/123".to_string()),
+      command: None,
+      auth: AuthOptions {
+        url: Some("https://example.com".to_string()),
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: "./output".to_string(),
+        format: OutputFormat::Markdown,
+        overwrite: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: false,
+        color: ColorOption::Auto,
+      },
+      page: PageOptions {
+        children: false,
+        max_depth: Some(3),
+        attachments: false,
+        comments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: true,
+        images_dir: "images".to_string(),
+        convert_links: true,
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: 4,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let result = cli.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("--max-depth requires --children"));
+  }
+
+  #[test]
+  fn test_cli_validation_url_input_succeeds() {
+    let cli = Cli {
+      page_input: Some("https://example.com/wiki/pages/123".to_string()),
+      command: None,
+      auth: AuthOptions {
+        url: None,
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: "./output".to_string(),
+        format: OutputFormat::Markdown,
+        overwrite: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: false,
+        color: ColorOption::Auto,
+      },
+      page: PageOptions {
+        children: false,
+        max_depth: None,
+        attachments: false,
+        comments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: true,
+        images_dir: "images".to_string(),
+        convert_links: true,
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: 4,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let result = cli.validate();
+    assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_cli_validation_command_succeeds() {
+    let cli = Cli {
+      page_input: None,
+      command: Some(Command::Version {
+        json: false,
+        short: false,
+      }),
+      auth: AuthOptions {
+        url: None,
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: "./output".to_string(),
+        format: OutputFormat::Markdown,
+        overwrite: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: false,
+        color: ColorOption::Auto,
+      },
+      page: PageOptions {
+        children: false,
+        max_depth: None,
+        attachments: false,
+        comments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: true,
+        images_dir: "images".to_string(),
+        convert_links: true,
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: 4,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let result = cli.validate();
+    assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_cli_validation_numeric_id_with_url_succeeds() {
+    let cli = Cli {
+      page_input: Some("123456".to_string()),
+      command: None,
+      auth: AuthOptions {
+        url: Some("https://example.com".to_string()),
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: "./output".to_string(),
+        format: OutputFormat::Markdown,
+        overwrite: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: false,
+        color: ColorOption::Auto,
+      },
+      page: PageOptions {
+        children: false,
+        max_depth: None,
+        attachments: false,
+        comments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: true,
+        images_dir: "images".to_string(),
+        convert_links: true,
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: 4,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let result = cli.validate();
+    assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_cli_validation_children_with_max_depth_succeeds() {
+    let cli = Cli {
+      page_input: Some("https://example.com/page/123".to_string()),
+      command: None,
+      auth: AuthOptions {
+        url: None,
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: "./output".to_string(),
+        format: OutputFormat::Markdown,
+        overwrite: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: false,
+        color: ColorOption::Auto,
+      },
+      page: PageOptions {
+        children: true,
+        max_depth: Some(3),
+        attachments: false,
+        comments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: true,
+        images_dir: "images".to_string(),
+        convert_links: true,
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: 4,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let result = cli.validate();
+    assert!(result.is_ok());
   }
 }

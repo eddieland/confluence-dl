@@ -67,6 +67,24 @@ cloc: ## Count lines of code using Docker
 		--exclude-dir=.git,.github,example,docs,ref,target \
 		--fullpath
 
+### Coverage
+
+.PHONY: coverage
+coverage: ## Run code coverage
+	cargo llvm-cov nextest --all-features
+
+.PHONY: coverage-html
+coverage-html: ## Generate HTML coverage report
+	cargo llvm-cov nextest --all-features --html
+
+.PHONY: coverage-open
+coverage-open: ## Generate HTML coverage report and open it in browser
+	cargo llvm-cov nextest --all-features --html --open
+
+.PHONY: coverage-report
+coverage-report: ## Generate LCOV report
+	cargo llvm-cov nextest --all-features --lcov --output-path lcov.info
+
 ### Build
 
 .PHONY: build

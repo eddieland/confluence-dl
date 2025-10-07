@@ -267,4 +267,62 @@ mod tests {
     let url = "https://example.atlassian.net/wiki/pages/notanumber";
     assert!(parse_confluence_url(url).is_err());
   }
+
+  #[test]
+  fn test_confluence_client_new() {
+    let client = ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30);
+    assert!(client.is_ok());
+    let client = client.unwrap();
+    assert_eq!(client.base_url, "https://example.atlassian.net");
+    assert_eq!(client.username, "user@example.com");
+    assert_eq!(client.token, "test-token");
+  }
+
+  #[test]
+  fn test_confluence_client_new_removes_trailing_slash() {
+    let client = ConfluenceClient::new("https://example.atlassian.net/", "user@example.com", "test-token", 30).unwrap();
+    assert_eq!(client.base_url, "https://example.atlassian.net");
+  }
+
+  #[test]
+  fn test_auth_header_format() {
+    let client = ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30).unwrap();
+
+    let auth_header = client.auth_header();
+    assert!(auth_header.starts_with("Basic "));
+
+    // Decode and verify the Base64 encoded credentials
+    let encoded = auth_header.strip_prefix("Basic ").unwrap();
+    let decoded = BASE64.decode(encoded.as_bytes()).unwrap();
+    let decoded_str = String::from_utf8(decoded).unwrap();
+    assert_eq!(decoded_str, "user@example.com:test-token");
+  }
+
+  #[test]
+  fn test_parse_confluence_url_missing_pages_segment() {
+    let url = "https://example.atlassian.net/wiki/spaces/SPACE/123456";
+    assert!(parse_confluence_url(url).is_err());
+  }
+
+  #[test]
+  fn test_parse_confluence_url_pages_at_end() {
+    let url = "https://example.atlassian.net/wiki/pages";
+    let result = parse_confluence_url(url);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("does not contain page ID"));
+  }
+
+  #[test]
+  fn test_parse_confluence_url_invalid_scheme() {
+    let url = "not-a-url";
+    assert!(parse_confluence_url(url).is_err());
+  }
+
+  #[test]
+  fn test_parse_confluence_url_no_host() {
+    let url = "file:///wiki/pages/123";
+    let result = parse_confluence_url(url);
+    // This should error because file:// scheme doesn't have a host
+    assert!(result.is_err());
+  }
 }

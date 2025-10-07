@@ -676,4 +676,64 @@ machine example.com extra tokens ignored
     assert_eq!(cred.username, "user1");
     assert_eq!(cred.password, "pass1");
   }
+
+  #[test]
+  fn test_credential_error_display() {
+    let err1 = CredentialError::NetrcNotFound;
+    assert_eq!(err1.to_string(), ".netrc file not found");
+
+    let err2 = CredentialError::NetrcParseError("bad syntax".to_string());
+    assert_eq!(err2.to_string(), "failed to parse .netrc: bad syntax");
+
+    let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+    let err3 = CredentialError::IoError(io_err);
+    assert!(err3.to_string().contains("I/O error"));
+  }
+
+  #[test]
+  fn test_credential_error_source() {
+    use std::error::Error;
+
+    let err1 = CredentialError::NetrcNotFound;
+    assert!(err1.source().is_none());
+
+    let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+    let err2 = CredentialError::IoError(io_err);
+    assert!(err2.source().is_some());
+  }
+
+  #[test]
+  fn test_credential_error_from_io_error() {
+    let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+    let cred_err: CredentialError = io_err.into();
+    assert!(matches!(cred_err, CredentialError::IoError(_)));
+  }
+
+  #[test]
+  fn test_credential_debug() {
+    let cred = Credential {
+      username: "user".to_string(),
+      password: "secret".to_string(),
+    };
+    let debug_str = format!("{cred:?}");
+    assert!(debug_str.contains("Credential"));
+    assert!(debug_str.contains("username"));
+    assert!(debug_str.contains("password"));
+  }
+
+  #[test]
+  fn test_credential_clone_and_equality() {
+    let cred1 = Credential {
+      username: "user1".to_string(),
+      password: "pass1".to_string(),
+    };
+    let cred2 = cred1.clone();
+    let cred3 = Credential {
+      username: "user2".to_string(),
+      password: "pass1".to_string(),
+    };
+
+    assert_eq!(cred1, cred2);
+    assert_ne!(cred1, cred3);
+  }
 }
