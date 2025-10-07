@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # For creating releases
+  actions: read # For artifact downloads
+
+jobs:
+  validate-version:
+    name: Validate Version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Check version format
+        run: |
+          if [[ ! ${{ steps.version.outputs.version }} =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+
+  build-ubuntu:
+    needs: validate-version
+    name: Build Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-ubuntu-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build release
+        run: cargo build --release --bin confluence-dl
+      - name: Strip binary
+        run: strip target/release/confluence-dl
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Compress binary
+        run: |
+          tar -czf confluence-dl-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release confluence-dl
+          shasum -a 256 confluence-dl-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz > confluence-dl-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: confluence-dl-linux
+          path: |
+            confluence-dl-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            confluence-dl-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+
+  build-macos:
+    needs: validate-version
+    name: Build macOS
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-macos-latest-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build release
+        run: cargo build --release --bin confluence-dl
+      - name: Strip binary
+        run: strip target/release/confluence-dl
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Compress binary
+        run: |
+          tar -czf confluence-dl-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release confluence-dl
+          shasum -a 256 confluence-dl-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz > confluence-dl-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: confluence-dl-macos
+          path: |
+            confluence-dl-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz
+            confluence-dl-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
+
+  create-release:
+    name: Create Release
+    if: success()
+    needs: [validate-version, build-ubuntu, build-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history to get previous tags
+
+      - name: Get version and previous tag
+        id: version_info
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          echo "PREVIOUS_TAG=${PREVIOUS_TAG#v}" >>$GITHUB_ENV
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: confluence-dl-linux
+          path: ./
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: confluence-dl-macos
+          path: ./
+
+      - name: Install envsubst
+        run: sudo apt-get update && sudo apt-get install -y gettext-base
+
+      - name: Generate Release Notes
+        run: |
+          envsubst <.github/release-template.md >release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./confluence-dl-linux-x86_64-*.tar.gz
+            ./confluence-dl-linux-x86_64-*.tar.gz.sha256
+            ./confluence-dl-macos-x86_64-*.tar.gz
+            ./confluence-dl-macos-x86_64-*.tar.gz.sha256
+            ./confluence-dl-windows-x86_64-*.zip
+            ./confluence-dl-windows-x86_64-*.zip.sha256
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: false
