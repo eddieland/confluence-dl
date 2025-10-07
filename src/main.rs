@@ -418,7 +418,7 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
   }
 
   // Write to file
-  println!("\n{} {}", colors.info("→"), colors.info("Writing to disk"));
+  println!("{} {}", colors.info("→"), colors.info("Writing to disk"));
   println!("  {}: {}", colors.emphasis("File"), colors.path(output_path.display()));
 
   fs::write(&output_path, markdown)?;

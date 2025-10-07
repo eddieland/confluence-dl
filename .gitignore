@@ -21,4 +21,4 @@ target
 #.idea/
 
 # Outputs from confluence-dl
-./confluence-export/
+confluence-export/

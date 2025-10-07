@@ -24,11 +24,7 @@ lint-all: ## Run clippy with all features
 
 .PHONY: test
 test: build ## Run tests
-	cargo nextest run --workspace
-
-.PHONY: test-all
-test-all: ## Run tests with all features
-	cargo nextest run --all-features
+	cargo nextest run
 
 .PHONY: check
 check: ## Run cargo check

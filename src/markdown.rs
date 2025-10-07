@@ -1,211 +1,370 @@
 //! Markdown conversion utilities for Confluence content.
 //!
 //! This module provides functionality to convert Confluence storage format
-//! (XHTML-like) to Markdown.
+//! (XHTML-like) to Markdown using proper HTML parsing.
 
 use anyhow::Result;
+use scraper::{Html, Node, Selector};
 
 /// Convert Confluence storage format to Markdown
 ///
-/// This is a basic implementation that handles common Confluence elements.
-/// More sophisticated conversion can be added later.
+/// This implementation uses proper HTML parsing to handle Confluence's
+/// complex XML/HTML structure.
 pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
-  let mut markdown = storage_content.to_string();
+  // Parse the HTML/XML content
+  let document = Html::parse_document(storage_content);
 
-  // Remove XML declaration if present
-  markdown = markdown
-    .trim_start_matches("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
-    .trim()
-    .to_string();
+  // Convert to markdown
+  let markdown = convert_element_to_markdown(&document.root_element());
 
-  // Convert headings
-  markdown = convert_headings(&markdown);
+  // Clean up the result
+  let cleaned = clean_markdown(&markdown);
 
-  // Convert formatting
-  markdown = convert_formatting(&markdown);
-
-  // Convert links
-  markdown = convert_links(&markdown);
-
-  // Convert lists
-  markdown = convert_lists(&markdown);
-
-  // Convert code blocks
-  markdown = convert_code_blocks(&markdown);
-
-  // Convert images
-  markdown = convert_images(&markdown);
-
-  // Clean up remaining HTML tags (simple approach)
-  markdown = strip_common_tags(&markdown);
-
-  // Clean up excessive newlines
-  markdown = clean_whitespace(&markdown);
-
-  Ok(markdown)
+  Ok(cleaned)
 }
 
-/// Convert Confluence headings to Markdown
-fn convert_headings(content: &str) -> String {
-  let mut result = content.to_string();
+/// Convert an element and its children to markdown recursively
+fn convert_element_to_markdown(element: &scraper::ElementRef) -> String {
+  let mut result = String::new();
 
-  // h1-h6 tags
-  for level in 1..=6 {
-    let opening = format!("<h{level}>");
-    let closing = format!("</h{level}>");
-    let prefix = "#".repeat(level);
+  for child in element.children() {
+    match child.value() {
+      Node::Element(elem) => {
+        let tag_name = elem.name();
 
-    while let Some(start) = result.find(&opening) {
-      if let Some(end) = result[start..].find(&closing) {
-        let full_end = start + end + closing.len();
-        let content = &result[start + opening.len()..start + end];
-        let replacement = format!("\n{} {}\n", prefix, content.trim());
-        result.replace_range(start..full_end, &replacement);
-      } else {
-        break;
-      }
-    }
-  }
+        if let Some(child_element) = scraper::ElementRef::wrap(child) {
+          match tag_name {
+            // Headings
+            "h1" => result.push_str(&format!("\n# {}\n\n", get_element_text(&child_element))),
+            "h2" => result.push_str(&format!("\n## {}\n\n", get_element_text(&child_element))),
+            "h3" => result.push_str(&format!("\n### {}\n\n", get_element_text(&child_element))),
+            "h4" => result.push_str(&format!("\n#### {}\n\n", get_element_text(&child_element))),
+            "h5" => result.push_str(&format!("\n##### {}\n\n", get_element_text(&child_element))),
+            "h6" => result.push_str(&format!("\n###### {}\n\n", get_element_text(&child_element))),
 
-  result
-}
+            // Paragraphs
+            "p" => {
+              let text = get_element_text(&child_element).trim().to_string();
+              if !text.is_empty() {
+                result.push_str(&format!("{text}\n\n"));
+              }
+            }
 
-/// Convert text formatting (bold, italic, etc.)
-fn convert_formatting(content: &str) -> String {
-  let mut result = content.to_string();
+            // Text formatting
+            "strong" | "b" => result.push_str(&format!("**{}**", get_element_text(&child_element))),
+            "em" | "i" => result.push_str(&format!("_{}_", get_element_text(&child_element))),
+            "u" => result.push_str(&format!("_{}_", get_element_text(&child_element))),
+            "s" | "del" => result.push_str(&format!("~~{}~~", get_element_text(&child_element))),
+            "code" => result.push_str(&format!("`{}`", get_element_text(&child_element))),
 
-  // Bold (<strong> or <b>)
-  result = result.replace("<strong>", "**").replace("</strong>", "**");
-  result = result.replace("<b>", "**").replace("</b>", "**");
+            // Lists
+            "ul" => {
+              result.push('\n');
+              for li in child_element.select(&Selector::parse("li").unwrap()) {
+                result.push_str(&format!("- {}\n", get_element_text(&li).trim()));
+              }
+              result.push('\n');
+            }
+            "ol" => {
+              result.push('\n');
+              for (i, li) in child_element.select(&Selector::parse("li").unwrap()).enumerate() {
+                result.push_str(&format!("{}. {}\n", i + 1, get_element_text(&li).trim()));
+              }
+              result.push('\n');
+            }
 
-  // Italic (<em> or <i>)
-  result = result.replace("<em>", "_").replace("</em>", "_");
-  result = result.replace("<i>", "_").replace("</i>", "_");
+            // Links
+            "a" => {
+              let text = get_element_text(&child_element);
+              let href = child_element.value().attr("href").unwrap_or("");
+              result.push_str(&format!("[{}]({})", text.trim(), href));
+            }
 
-  // Underline (no direct markdown equivalent, use emphasis)
-  result = result.replace("<u>", "_").replace("</u>", "_");
+            // Line breaks
+            "br" => result.push('\n'),
+            "hr" => result.push_str("\n---\n\n"),
 
-  // Strikethrough
-  result = result.replace("<s>", "~~").replace("</s>", "~~");
-  result = result.replace("<del>", "~~").replace("</del>", "~~");
+            // Code blocks
+            "pre" => {
+              let code = get_element_text(&child_element);
+              result.push_str(&format!("\n```\n{}\n```\n\n", code.trim()));
+            }
 
-  result
-}
+            // Tables
+            "table" => {
+              result.push_str(&convert_table_to_markdown(&child_element));
+            }
 
-/// Convert links to Markdown
-fn convert_links(content: &str) -> String {
-  let mut result = content.to_string();
+            // Confluence-specific macros
+            "ac:structured-macro" => {
+              result.push_str(&convert_macro_to_markdown(&child_element));
+            }
 
-  // Simple regex-like replacement for <a href="url">text</a>
-  // This is a simplified version; a proper implementation would use a parser
-  while let Some(start) = result.find("<a href=\"") {
-    if let Some(quote_end) = result[start + 9..].find('"') {
-      let url_start = start + 9;
-      let url_end = url_start + quote_end;
-      let url = &result[url_start..url_end].to_string();
+            // Confluence task lists
+            "ac:task-list" => {
+              result.push_str(&convert_task_list_to_markdown(&child_element));
+            }
 
-      if let Some(close_tag) = result[url_end..].find('>') {
-        let text_start = url_end + close_tag + 1;
-        if let Some(end_tag) = result[text_start..].find("</a>") {
-          let text_end = text_start + end_tag;
-          let text = &result[text_start..text_end].to_string();
-          let replacement = format!("[{text}]({url})");
-          result.replace_range(start..text_end + 4, &replacement);
-        } else {
-          break;
+            // Confluence images
+            "ac:image" => {
+              result.push_str(&convert_image_to_markdown(&child_element));
+            }
+
+            // Layout sections (just extract content)
+            "ac:layout" | "ac:layout-section" | "ac:layout-cell" | "ac:rich-text-body" => {
+              result.push_str(&convert_element_to_markdown(&child_element));
+            }
+
+            // Skip these Confluence-specific tags
+            "ri:url" | "ac:parameter" | "ac:task-id" | "ac:task-status" | "ac:task-body" => {
+              // For task-body, still extract the text
+              if tag_name == "ac:task-body" {
+                result.push_str(&get_element_text(&child_element));
+              }
+            }
+
+            // Span elements - just extract content
+            "span" => {
+              result.push_str(&convert_element_to_markdown(&child_element));
+            }
+
+            // Default: recurse into children
+            _ => {
+              result.push_str(&convert_element_to_markdown(&child_element));
+            }
+          }
         }
-      } else {
-        break;
       }
-    } else {
-      break;
+      Node::Text(text) => {
+        // Decode HTML entities and add text
+        let decoded = decode_html_entities(text);
+        result.push_str(&decoded);
+      }
+      _ => {
+        // Ignore comments, doctypes, etc.
+      }
     }
   }
 
   result
 }
 
-/// Convert lists to Markdown
-fn convert_lists(content: &str) -> String {
-  let mut result = content.to_string();
+/// Get all text content from an element and its children
+fn get_element_text(element: &scraper::ElementRef) -> String {
+  let mut text = String::new();
 
-  // Unordered lists
-  result = result.replace("<ul>", "\n").replace("</ul>", "\n");
-  result = result.replace("<li>", "- ").replace("</li>", "\n");
+  for child in element.children() {
+    match child.value() {
+      Node::Text(t) => text.push_str(&decode_html_entities(t)),
+      Node::Element(_) => {
+        if let Some(child_elem) = scraper::ElementRef::wrap(child) {
+          text.push_str(&get_element_text(&child_elem));
+        }
+      }
+      _ => {}
+    }
+  }
 
-  // Ordered lists (simplified - doesn't handle numbering)
-  result = result.replace("<ol>", "\n").replace("</ol>", "\n");
+  text
+}
 
+/// Convert Confluence structured macros to markdown
+fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
+  let macro_name = element.value().attr("ac:name").unwrap_or("");
+
+  match macro_name {
+    "toc" => "\n**Table of Contents**\n\n".to_string(),
+    "panel" => {
+      // Extract rich text body if present - iterate children since namespaced
+      // elements aren't valid CSS selectors
+      let body = find_child_by_tag(element, "ac:rich-text-body")
+        .map(|elem| convert_element_to_markdown(&elem))
+        .unwrap_or_else(|| get_element_text(element));
+      format!("\n> {}\n\n", body.trim())
+    }
+    "status" => {
+      let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
+        .map(|e| e.text().collect::<String>())
+        .unwrap_or_default();
+      format!("`[{title}]`")
+    }
+    "expand" => {
+      let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
+        .map(|e| e.text().collect::<String>())
+        .unwrap_or_else(|| "Details".to_string());
+
+      let body = find_child_by_tag(element, "ac:rich-text-body")
+        .map(|elem| convert_element_to_markdown(&elem))
+        .unwrap_or_else(|| get_element_text(element));
+
+      format!(
+        "\n<details>\n<summary>{}</summary>\n\n{}\n</details>\n\n",
+        title,
+        body.trim()
+      )
+    }
+    "anchor" => String::new(), // Skip anchors
+    _ => {
+      // For unknown macros, just extract the text content
+      get_element_text(element)
+    }
+  }
+}
+
+/// Find a child element by tag name (handles namespaced tags)
+fn find_child_by_tag<'a>(element: &'a scraper::ElementRef, tag_name: &str) -> Option<scraper::ElementRef<'a>> {
+  for child in element.children() {
+    if let Node::Element(elem) = child.value()
+      && elem.name() == tag_name {
+        return scraper::ElementRef::wrap(child);
+      }
+  }
+  None
+}
+
+/// Find a child element by tag name and attribute value
+fn find_child_by_tag_and_attr<'a>(
+  element: &'a scraper::ElementRef,
+  tag_name: &str,
+  attr_name: &str,
+  attr_value: &str,
+) -> Option<scraper::ElementRef<'a>> {
+  for child in element.children() {
+    if let Node::Element(elem) = child.value()
+      && elem.name() == tag_name
+        && let Some(child_elem) = scraper::ElementRef::wrap(child)
+          && child_elem.value().attr(attr_name) == Some(attr_value) {
+            return Some(child_elem);
+          }
+  }
+  None
+}
+
+/// Convert Confluence task list to markdown checkboxes
+fn convert_task_list_to_markdown(element: &scraper::ElementRef) -> String {
+  let mut result = String::new();
+
+  // Iterate through children to find ac:task elements
+  for child in element.children() {
+    if let Node::Element(elem) = child.value()
+      && elem.name() == "ac:task"
+        && let Some(task) = scraper::ElementRef::wrap(child) {
+          let status = find_child_by_tag(&task, "ac:task-status")
+            .map(|e| e.text().collect::<String>())
+            .unwrap_or_else(|| "incomplete".to_string());
+
+          let body = find_child_by_tag(&task, "ac:task-body")
+            .map(|e| get_element_text(&e))
+            .unwrap_or_default();
+
+          let checkbox = if status.trim() == "complete" { "[x]" } else { "[ ]" };
+          result.push_str(&format!("- {} {}\n", checkbox, body.trim()));
+        }
+  }
+
+  result.push('\n');
   result
 }
 
-/// Convert code blocks to Markdown
-fn convert_code_blocks(content: &str) -> String {
-  let mut result = content.to_string();
+/// Convert Confluence image to markdown
+fn convert_image_to_markdown(element: &scraper::ElementRef) -> String {
+  // Try to find the image URL using child iteration
+  let url = find_child_by_tag(element, "ri:url")
+    .and_then(|e| e.value().attr("ri:value"))
+    .unwrap_or("");
 
-  // Inline code
-  result = result.replace("<code>", "`").replace("</code>", "`");
+  let alt = element.value().attr("ac:alt").unwrap_or("image");
 
-  // Code blocks (simplified)
-  result = result.replace("<pre>", "\n```\n").replace("</pre>", "\n```\n");
+  if !url.is_empty() {
+    format!("\n![{alt}]({url})\n\n")
+  } else {
+    format!("\n![{alt}]()\n\n")
+  }
+}
 
+/// Convert HTML table to markdown table
+fn convert_table_to_markdown(element: &scraper::ElementRef) -> String {
+  let mut rows: Vec<Vec<String>> = Vec::new();
+
+  // Extract all rows
+  for tr in element.select(&Selector::parse("tr").unwrap()) {
+    let mut cells: Vec<String> = Vec::new();
+
+    // Get cells (th or td)
+    for cell in tr.select(&Selector::parse("th, td").unwrap()) {
+      let text = get_element_text(&cell).trim().to_string();
+      cells.push(text);
+    }
+
+    if !cells.is_empty() {
+      rows.push(cells);
+    }
+  }
+
+  if rows.is_empty() {
+    return String::new();
+  }
+
+  let mut result = String::new();
+  result.push('\n');
+
+  // Write header row (or first row if no header)
+  if let Some(first_row) = rows.first() {
+    result.push_str("| ");
+    result.push_str(&first_row.join(" | "));
+    result.push_str(" |\n");
+
+    // Write separator
+    result.push('|');
+    for _ in 0..first_row.len() {
+      result.push_str(" --- |");
+    }
+    result.push('\n');
+  }
+
+  // Write remaining rows
+  for row in rows.iter().skip(1) {
+    result.push_str("| ");
+    result.push_str(&row.join(" | "));
+    result.push_str(" |\n");
+  }
+
+  result.push('\n');
   result
 }
 
-/// Convert images to Markdown
-fn convert_images(content: &str) -> String {
-  let mut result = content.to_string();
-
-  // ac:image is Confluence's image macro
-  // This is a simplified conversion - proper implementation would extract actual
-  // image URLs
-  result = result.replace("<ac:image>", "![image]");
-  result = result.replace("</ac:image>", "");
-
-  result
+/// Decode common HTML entities
+fn decode_html_entities(text: &str) -> String {
+  text
+    .replace("&nbsp;", " ")
+    .replace("&rsquo;", "'")
+    .replace("&lsquo;", "'")
+    .replace("&rdquo;", "\"")
+    .replace("&ldquo;", "\"")
+    .replace("&mdash;", "—")
+    .replace("&ndash;", "–")
+    .replace("&amp;", "&")
+    .replace("&lt;", "<")
+    .replace("&gt;", ">")
+    .replace("&quot;", "\"")
+    .replace("&rarr;", "→")
+    .replace("&larr;", "←")
+    .replace("&#39;", "'")
 }
 
-/// Strip common HTML tags that don't have direct Markdown equivalents
-fn strip_common_tags(content: &str) -> String {
+/// Clean up the markdown output
+fn clean_markdown(content: &str) -> String {
   let mut result = content.to_string();
 
-  // Paragraph tags (just use blank lines in markdown)
-  result = result.replace("<p>", "\n").replace("</p>", "\n");
-
-  // Div tags
-  result = result.replace("<div>", "\n").replace("</div>", "\n");
-
-  // Span tags
-  result = result.replace("<span>", "").replace("</span>", "");
-
-  // Break tags
-  result = result
-    .replace("<br>", "\n")
-    .replace("<br/>", "\n")
-    .replace("<br />", "\n");
-
-  // Table tags (very basic conversion)
-  result = result.replace("<table>", "\n").replace("</table>", "\n");
-  result = result.replace("<tr>", "| ").replace("</tr>", " |\n");
-  result = result.replace("<td>", " ").replace("</td>", " | ");
-  result = result.replace("<th>", " ").replace("</th>", " | ");
-
-  result
-}
-
-/// Clean up excessive whitespace
-fn clean_whitespace(content: &str) -> String {
-  let mut result = content.to_string();
-
-  // Replace multiple consecutive newlines with at most 2
+  // Remove excessive blank lines (more than 2 consecutive)
   while result.contains("\n\n\n") {
     result = result.replace("\n\n\n", "\n\n");
   }
 
-  // Trim leading/trailing whitespace
+  // Remove leading/trailing whitespace
   result = result.trim().to_string();
 
-  // Ensure file ends with a newline
+  // Ensure file ends with newline
   if !result.ends_with('\n') {
     result.push('\n');
   }
@@ -218,31 +377,59 @@ mod tests {
   use super::*;
 
   #[test]
+  fn test_decode_html_entities() {
+    let input = "There&rsquo;s a lot&mdash;this &amp; that";
+    let output = decode_html_entities(input);
+    assert_eq!(output, "There's a lot—this & that");
+  }
+
+  #[test]
   fn test_convert_headings() {
     let input = "<h1>Title</h1><h2>Subtitle</h2>";
-    let output = convert_headings(input);
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("# Title"));
     assert!(output.contains("## Subtitle"));
   }
 
   #[test]
   fn test_convert_formatting() {
-    let input = "<strong>bold</strong> <em>italic</em> <s>strike</s>";
-    let output = convert_formatting(input);
-    assert_eq!(output, "**bold** _italic_ ~~strike~~");
+    let input = "<p><strong>bold</strong> <em>italic</em> <s>strike</s></p>";
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("**bold**"));
+    assert!(output.contains("_italic_"));
+    assert!(output.contains("~~strike~~"));
   }
 
   #[test]
   fn test_convert_links() {
-    let input = "<a href=\"https://example.com\">Example</a>";
-    let output = convert_links(input);
-    assert_eq!(output, "[Example](https://example.com)");
+    let input = r#"<a href="https://example.com">Example</a>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("[Example](https://example.com)"));
   }
 
   #[test]
-  fn test_convert_code() {
-    let input = "Some <code>inline code</code> here";
-    let output = convert_code_blocks(input);
-    assert_eq!(output, "Some `inline code` here");
+  fn test_convert_task_list() {
+    let input = r#"
+      <ac:task-list>
+        <ac:task>
+          <ac:task-status>incomplete</ac:task-status>
+          <ac:task-body>Task 1</ac:task-body>
+        </ac:task>
+        <ac:task>
+          <ac:task-status>complete</ac:task-status>
+          <ac:task-body>Task 2</ac:task-body>
+        </ac:task>
+      </ac:task-list>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("[ ] Task 1"));
+    assert!(output.contains("[x] Task 2"));
+  }
+
+  #[test]
+  fn test_convert_image() {
+    let input = r#"<ac:image ac:alt="test image"><ri:url ri:value="https://example.com/image.png" /></ac:image>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("![test image](https://example.com/image.png)"));
   }
 }
