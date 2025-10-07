@@ -298,3 +298,182 @@ fn test_image_download_workflow() {
     updated_markdown
   );
 }
+
+#[test]
+fn test_get_child_pages_empty() {
+  let client = FakeConfluenceClient::with_sample_pages();
+
+  // Page with no children should return empty vec
+  let children = client.get_child_pages("123456").unwrap();
+  assert!(children.is_empty(), "Page should have no children");
+}
+
+#[test]
+fn test_get_child_pages_with_children() {
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add child pages
+  client.add_page_from_json("111111", fixtures::sample_child_page_1_response());
+  client.add_page_from_json("222222", fixtures::sample_child_page_2_response());
+
+  // Set up parent-child relationship
+  client.add_child_pages("123456", vec!["111111".to_string(), "222222".to_string()]);
+
+  // Get children
+  let children = client.get_child_pages("123456").unwrap();
+  assert_eq!(children.len(), 2, "Should have 2 children");
+
+  // Verify child titles
+  assert_eq!(children[0].title, "Child Page 1");
+  assert_eq!(children[1].title, "Child Page 2");
+}
+
+#[test]
+fn test_page_tree_single_page() {
+  use confluence_dl::confluence::get_page_tree;
+
+  let client = FakeConfluenceClient::with_sample_pages();
+
+  // Build tree for page with no children
+  let tree = get_page_tree(&client, "123456", None).unwrap();
+
+  assert_eq!(tree.page.id, "123456");
+  assert_eq!(tree.page.title, "Getting Started Guide");
+  assert_eq!(tree.depth, 0);
+  assert!(tree.children.is_empty());
+}
+
+#[test]
+fn test_page_tree_with_children() {
+  use confluence_dl::confluence::get_page_tree;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Set up page hierarchy: 123456 -> [111111, 222222]
+  client.add_page_from_json("111111", fixtures::sample_child_page_1_response());
+  client.add_page_from_json("222222", fixtures::sample_child_page_2_response());
+  client.add_child_pages("123456", vec!["111111".to_string(), "222222".to_string()]);
+
+  // Build tree
+  let tree = get_page_tree(&client, "123456", None).unwrap();
+
+  assert_eq!(tree.page.title, "Getting Started Guide");
+  assert_eq!(tree.depth, 0);
+  assert_eq!(tree.children.len(), 2);
+
+  // Verify first child
+  assert_eq!(tree.children[0].page.title, "Child Page 1");
+  assert_eq!(tree.children[0].depth, 1);
+  assert!(tree.children[0].children.is_empty());
+
+  // Verify second child
+  assert_eq!(tree.children[1].page.title, "Child Page 2");
+  assert_eq!(tree.children[1].depth, 1);
+  assert!(tree.children[1].children.is_empty());
+}
+
+#[test]
+fn test_page_tree_with_grandchildren() {
+  use confluence_dl::confluence::get_page_tree;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Set up page hierarchy: 123456 -> 111111 -> 333333
+  client.add_page_from_json("111111", fixtures::sample_child_page_1_response());
+  client.add_page_from_json("333333", fixtures::sample_grandchild_page_response());
+  client.add_child_pages("123456", vec!["111111".to_string()]);
+  client.add_child_pages("111111", vec!["333333".to_string()]);
+
+  // Build tree with unlimited depth
+  let tree = get_page_tree(&client, "123456", None).unwrap();
+
+  assert_eq!(tree.depth, 0);
+  assert_eq!(tree.children.len(), 1);
+
+  // Verify child
+  let child = &tree.children[0];
+  assert_eq!(child.page.title, "Child Page 1");
+  assert_eq!(child.depth, 1);
+  assert_eq!(child.children.len(), 1);
+
+  // Verify grandchild
+  let grandchild = &child.children[0];
+  assert_eq!(grandchild.page.title, "Grandchild Page");
+  assert_eq!(grandchild.depth, 2);
+  assert!(grandchild.children.is_empty());
+}
+
+#[test]
+fn test_page_tree_max_depth_limit() {
+  use confluence_dl::confluence::get_page_tree;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Set up page hierarchy: 123456 -> 111111 -> 333333
+  client.add_page_from_json("111111", fixtures::sample_child_page_1_response());
+  client.add_page_from_json("333333", fixtures::sample_grandchild_page_response());
+  client.add_child_pages("123456", vec!["111111".to_string()]);
+  client.add_child_pages("111111", vec!["333333".to_string()]);
+
+  // Build tree with max_depth = 1 (should stop at children, not grandchildren)
+  let tree = get_page_tree(&client, "123456", Some(1)).unwrap();
+
+  assert_eq!(tree.depth, 0);
+  assert_eq!(tree.children.len(), 1);
+
+  // Verify child exists
+  let child = &tree.children[0];
+  assert_eq!(child.page.title, "Child Page 1");
+  assert_eq!(child.depth, 1);
+
+  // Grandchild should NOT be included due to depth limit
+  assert!(
+    child.children.is_empty(),
+    "Should not fetch grandchildren when max_depth=1"
+  );
+}
+
+#[test]
+fn test_page_tree_depth_zero() {
+  use confluence_dl::confluence::get_page_tree;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Set up children
+  client.add_page_from_json("111111", fixtures::sample_child_page_1_response());
+  client.add_child_pages("123456", vec!["111111".to_string()]);
+
+  // Build tree with max_depth = 0 (should include only root page)
+  let tree = get_page_tree(&client, "123456", Some(0)).unwrap();
+
+  assert_eq!(tree.depth, 0);
+  assert!(tree.children.is_empty(), "Should not fetch children when max_depth=0");
+}
+
+#[test]
+fn test_page_tree_circular_reference_detection() {
+  use confluence_dl::confluence::get_page_tree;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Create circular reference: 123456 -> 111111 -> 123456
+  client.add_page_from_json("111111", fixtures::sample_child_page_1_response());
+  client.add_child_pages("123456", vec!["111111".to_string()]);
+  client.add_child_pages("111111", vec!["123456".to_string()]);
+
+  // The function should successfully build the tree but skip the circular
+  // reference (it logs a warning and continues with other children)
+  let result = get_page_tree(&client, "123456", None);
+
+  assert!(result.is_ok(), "Should handle circular reference gracefully");
+  let tree = result.unwrap();
+
+  // Root page should be present
+  assert_eq!(tree.page.title, "Getting Started Guide");
+  assert_eq!(tree.children.len(), 1);
+
+  // Child should be present but without the circular reference back to parent
+  let child = &tree.children[0];
+  assert_eq!(child.page.title, "Child Page 1");
+  assert!(child.children.is_empty(), "Circular reference should be skipped");
+}

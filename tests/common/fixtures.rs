@@ -219,3 +219,88 @@ pub fn sample_page_with_images_response() -> serde_json::Value {
     }
   })
 }
+
+// Sample response for child pages
+pub fn sample_child_page_1_response() -> serde_json::Value {
+  json!({
+    "id": "111111",
+    "type": "page",
+    "status": "current",
+    "title": "Child Page 1",
+    "body": {
+      "storage": {
+        "value": "<h1>Child Page 1</h1><p>This is the first child page.</p>",
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<h1>Child Page 1</h1><p>This is the first child page.</p>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "DOCS",
+      "name": "Documentation",
+      "type": "global"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/DOCS/pages/111111/Child+Page+1",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/111111"
+    }
+  })
+}
+
+pub fn sample_child_page_2_response() -> serde_json::Value {
+  json!({
+    "id": "222222",
+    "type": "page",
+    "status": "current",
+    "title": "Child Page 2",
+    "body": {
+      "storage": {
+        "value": "<h1>Child Page 2</h1><p>This is the second child page.</p>",
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<h1>Child Page 2</h1><p>This is the second child page.</p>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "DOCS",
+      "name": "Documentation",
+      "type": "global"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/DOCS/pages/222222/Child+Page+2",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/222222"
+    }
+  })
+}
+
+pub fn sample_grandchild_page_response() -> serde_json::Value {
+  json!({
+    "id": "333333",
+    "type": "page",
+    "status": "current",
+    "title": "Grandchild Page",
+    "body": {
+      "storage": {
+        "value": "<h1>Grandchild Page</h1><p>This is a grandchild page (child of Child Page 1).</p>",
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<h1>Grandchild Page</h1><p>This is a grandchild page.</p>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "DOCS",
+      "name": "Documentation",
+      "type": "global"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/DOCS/pages/333333/Grandchild+Page",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/333333"
+    }
+  })
+}

@@ -335,6 +335,94 @@ fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
   println!("\n{} {}", colors.success("✓"), colors.success("Download complete"));
 }
 
+/// Download a page tree recursively
+fn download_page_tree(
+  client: &dyn ConfluenceApi,
+  tree: &confluence::PageTree,
+  output_dir: &Path,
+  cli: &Cli,
+  colors: &ColorScheme,
+) -> anyhow::Result<()> {
+  // Download the current page
+  let page = &tree.page;
+
+  if cli.behavior.verbose > 0 {
+    println!(
+      "{}   {} {}",
+      colors.progress("→"),
+      colors.dimmed(format!("Depth {}", tree.depth)),
+      colors.info(&page.title)
+    );
+  }
+
+  // Get the storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
+
+  // Convert to Markdown
+  let mut markdown = markdown::storage_to_markdown(storage_content)?;
+
+  // Download images if requested
+  if cli.images_links.download_images {
+    let image_refs = images::extract_image_references(storage_content)?;
+
+    if !image_refs.is_empty() {
+      let filename_map = images::download_images(
+        client,
+        &page.id,
+        &image_refs,
+        output_dir,
+        &cli.images_links.images_dir,
+        cli.output.overwrite,
+      )?;
+
+      markdown = images::update_markdown_image_links(&markdown, &filename_map);
+    }
+  }
+
+  // Generate filename from page title
+  let filename = sanitize_filename(&page.title);
+  let output_path = output_dir.join(format!("{filename}.md"));
+
+  // Check if file exists and handle overwrite
+  if output_path.exists() && !cli.output.overwrite {
+    eprintln!(
+      "{} File already exists: {}. Use --overwrite to replace it.",
+      colors.warning("⚠"),
+      colors.path(output_path.display())
+    );
+  } else {
+    // Create parent directory
+    if let Some(parent) = output_path.parent() {
+      fs::create_dir_all(parent)?;
+    }
+
+    // Write to file
+    fs::write(&output_path, markdown)?;
+
+    if !cli.behavior.quiet {
+      println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
+    }
+  }
+
+  // Download child pages recursively
+  if !tree.children.is_empty() {
+    // Create subdirectory for children
+    let child_dir = output_dir.join(&filename);
+    fs::create_dir_all(&child_dir)?;
+
+    for child_tree in &tree.children {
+      download_page_tree(client, child_tree, &child_dir, cli, colors)?;
+    }
+  }
+
+  Ok(())
+}
+
 /// Download a page and save it to disk
 fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::Result<()> {
   // Parse URL to extract page ID and base URL
@@ -368,7 +456,34 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
   println!("\n{} {}", colors.info("→"), colors.info("Connecting to Confluence"));
   let client = confluence::ConfluenceClient::new(&url_info.base_url, &username, &token, cli.performance.timeout)?;
 
-  // Fetch the page
+  // Check if we should download children
+  if cli.page.children {
+    println!("{} {}", colors.info("→"), colors.info("Fetching page tree"));
+
+    let max_depth = cli.page.max_depth;
+    if let Some(depth) = max_depth {
+      println!("  {}: {}", colors.emphasis("Max depth"), colors.number(depth));
+    }
+
+    let tree = confluence::get_page_tree(&client, &url_info.page_id, max_depth)?;
+
+    let total_pages = count_pages_in_tree(&tree);
+    println!(
+      "  {} Found {} {}",
+      colors.success("✓"),
+      colors.number(total_pages),
+      if total_pages == 1 { "page" } else { "pages" }
+    );
+
+    // Download the entire tree
+    println!("\n{} {}", colors.info("→"), colors.info("Downloading pages"));
+    let output_dir = Path::new(&cli.output.output);
+    download_page_tree(&client, &tree, output_dir, cli, colors)?;
+
+    return Ok(());
+  }
+
+  // Fetch single page (non-children mode)
   println!("{} {}", colors.info("→"), colors.info("Fetching page content"));
   let page = client.get_page(&url_info.page_id)?;
 
@@ -492,6 +607,11 @@ fn load_credentials(base_url: &str, cli: &Cli) -> anyhow::Result<(String, String
   anyhow::bail!(
     "Credentials not found. Provide --user and --token, set CONFLUENCE_USER and CONFLUENCE_TOKEN, or add to ~/.netrc"
   )
+}
+
+/// Count total pages in a page tree (including root and all descendants)
+fn count_pages_in_tree(tree: &confluence::PageTree) -> usize {
+  1 + tree.children.iter().map(count_pages_in_tree).sum::<usize>()
 }
 
 /// Sanitize a page title to create a valid filename

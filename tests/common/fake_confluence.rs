@@ -15,6 +15,7 @@ use crate::common::fixtures;
 pub struct FakeConfluenceClient {
   pages: HashMap<String, Page>,
   attachments: HashMap<String, Vec<Attachment>>,
+  child_pages: HashMap<String, Vec<String>>,
   auth_should_succeed: bool,
 }
 
@@ -24,6 +25,7 @@ impl FakeConfluenceClient {
     Self {
       pages: HashMap::new(),
       attachments: HashMap::new(),
+      child_pages: HashMap::new(),
       auth_should_succeed: true,
     }
   }
@@ -65,6 +67,12 @@ impl FakeConfluenceClient {
   pub fn add_attachments(&mut self, page_id: &str, attachments: Vec<Attachment>) {
     self.attachments.insert(page_id.to_string(), attachments);
   }
+
+  /// Add child pages for a parent page
+  #[allow(dead_code)]
+  pub fn add_child_pages(&mut self, parent_id: &str, child_ids: Vec<String>) {
+    self.child_pages.insert(parent_id.to_string(), child_ids);
+  }
 }
 
 impl Default for FakeConfluenceClient {
@@ -80,6 +88,19 @@ impl ConfluenceApi for FakeConfluenceClient {
       .get(page_id)
       .cloned()
       .ok_or_else(|| anyhow!("No content found with id: {}", page_id))
+  }
+
+  fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>> {
+    let child_ids = self.child_pages.get(page_id).cloned().unwrap_or_default();
+    let mut children = Vec::new();
+
+    for child_id in child_ids {
+      if let Some(page) = self.pages.get(&child_id) {
+        children.push(page.clone());
+      }
+    }
+
+    Ok(children)
   }
 
   fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {

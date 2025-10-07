@@ -17,6 +17,9 @@ pub trait ConfluenceApi {
   /// Fetch a page by ID
   fn get_page(&self, page_id: &str) -> Result<Page>;
 
+  /// Get child pages for a given page ID
+  fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>>;
+
   /// Get attachments for a page
   fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>>;
 
@@ -116,6 +119,20 @@ pub struct AttachmentsResponse {
   pub results: Vec<Attachment>,
 }
 
+/// Child pages response wrapper
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChildPagesResponse {
+  pub results: Vec<Page>,
+}
+
+/// Represents a page tree with hierarchical children
+#[derive(Debug, Clone)]
+pub struct PageTree {
+  pub page: Page,
+  pub children: Vec<PageTree>,
+  pub depth: usize,
+}
+
 /// Information extracted from a Confluence URL
 #[derive(Debug, Clone)]
 pub struct UrlInfo {
@@ -197,6 +214,30 @@ impl ConfluenceApi for ConfluenceClient {
       .context("Failed to parse page response from Confluence API")?;
 
     Ok(page)
+  }
+
+  fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>> {
+    let url = format!("{}/wiki/rest/api/content/{}/child/page", self.base_url, page_id);
+
+    let response = self
+      .client
+      .get(&url)
+      .header("Authorization", self.auth_header())
+      .header("Accept", "application/json")
+      .send()
+      .context("Failed to fetch child pages from Confluence API")?;
+
+    if !response.status().is_success() {
+      let status = response.status();
+      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
+    }
+
+    let child_pages: ChildPagesResponse = response
+      .json()
+      .context("Failed to parse child pages response from Confluence API")?;
+
+    Ok(child_pages.results)
   }
 
   fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
@@ -325,6 +366,66 @@ pub fn parse_confluence_url(url: &str) -> Result<UrlInfo> {
     base_url,
     page_id: page_id.to_string(),
     space_key,
+  })
+}
+
+/// Build a page tree recursively from a root page
+///
+/// This function traverses the page hierarchy starting from a root page,
+/// downloading child pages up to the specified maximum depth.
+///
+/// # Arguments
+/// * `client` - The Confluence API client
+/// * `page_id` - The root page ID to start from
+/// * `max_depth` - Maximum depth to traverse (None = unlimited)
+///
+/// # Returns
+/// A `PageTree` structure containing the page and all its children
+pub fn get_page_tree(client: &dyn ConfluenceApi, page_id: &str, max_depth: Option<usize>) -> Result<PageTree> {
+  get_page_tree_recursive(client, page_id, 0, max_depth, &mut std::collections::HashSet::new())
+}
+
+/// Recursive helper for building page trees
+fn get_page_tree_recursive(
+  client: &dyn ConfluenceApi,
+  page_id: &str,
+  current_depth: usize,
+  max_depth: Option<usize>,
+  visited: &mut std::collections::HashSet<String>,
+) -> Result<PageTree> {
+  // Check for circular references
+  if visited.contains(page_id) {
+    return Err(anyhow!("Circular reference detected: page {page_id} already visited"));
+  }
+  visited.insert(page_id.to_string());
+
+  // Fetch the page
+  let page = client.get_page(page_id)?;
+
+  // Check if we should fetch children
+  let children = if max_depth.is_none() || current_depth < max_depth.unwrap() {
+    let child_pages = client.get_child_pages(page_id)?;
+    let mut child_trees = Vec::new();
+
+    for child_page in child_pages {
+      match get_page_tree_recursive(client, &child_page.id, current_depth + 1, max_depth, visited) {
+        Ok(child_tree) => child_trees.push(child_tree),
+        Err(e) => {
+          // Log the error but continue with other children
+          eprintln!("Warning: Failed to fetch child page {}: {}", child_page.id, e);
+        }
+      }
+    }
+
+    child_trees
+  } else {
+    Vec::new()
+  };
+
+  Ok(PageTree {
+    page,
+    children,
+    depth: current_depth,
   })
 }
 
