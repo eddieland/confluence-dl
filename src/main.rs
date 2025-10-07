@@ -4,9 +4,12 @@
 
 mod cli;
 mod color;
+mod confluence;
 mod credentials;
+mod markdown;
 
-use std::{io, process};
+use std::path::Path;
+use std::{fs, io, process};
 
 use clap::CommandFactory;
 use clap_complete::{Shell as CompletionShell, generate};
@@ -292,13 +295,9 @@ fn handle_completions_command(shell: Shell) {
 
 /// Handle page download
 fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
-  println!("{} {}", colors.progress("Downloading page:"), colors.link(page_input));
-  println!(
-    "{} {}",
-    colors.emphasis("Output directory:"),
-    colors.path(&cli.output.output)
-  );
-  println!("{} {:?}", colors.emphasis("Format:"), cli.output.format);
+  println!("{} {}", colors.progress("→"), colors.info("Downloading page"));
+  println!("  {}: {}", colors.emphasis("URL"), colors.link(page_input));
+  println!("  {}: {}", colors.emphasis("Output"), colors.path(&cli.output.output));
 
   if cli.page.children {
     println!("  {} {}", colors.success("✓"), colors.info("Including child pages"));
@@ -321,22 +320,153 @@ fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
       colors.warning("⚠"),
       colors.warning("DRY RUN: No files will be downloaded")
     );
+    return;
   }
 
-  // TODO: Implement actual page download functionality
-  // 1. Parse page input (URL vs ID)
-  // 2. Load credentials
-  // 3. Connect to Confluence API
-  // 4. Download page content
-  // 5. Download children if requested
-  // 6. Download images and attachments
-  // 7. Convert to Markdown
-  // 8. Write to output directory
+  // Parse the input to extract page ID and base URL
+  if let Err(e) = download_page(page_input, cli, colors) {
+    eprintln!("{} {}", colors.error("✗"), colors.error("Failed to download page"));
+    eprintln!("  {}: {}", colors.emphasis("Error"), e);
+    process::exit(1);
+  }
 
-  eprintln!(
-    "\n{} Page download functionality not yet implemented",
-    colors.warning("Note:")
-  );
+  println!("\n{} {}", colors.success("✓"), colors.success("Download complete"));
+}
+
+/// Download a page and save it to disk
+fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::Result<()> {
+  // Parse URL to extract page ID and base URL
+  let url_info = if page_input.contains("://") {
+    // It's a URL
+    confluence::parse_confluence_url(page_input)?
+  } else {
+    // It's a page ID - need base URL from --url
+    if let Some(ref base_url) = cli.auth.url {
+      confluence::UrlInfo {
+        base_url: base_url.clone(),
+        page_id: page_input.to_string(),
+        space_key: None,
+      }
+    } else {
+      anyhow::bail!("--url is required when using a numeric page ID");
+    }
+  };
+
+  println!("\n{} {}", colors.info("→"), colors.info("Extracting page information"));
+  println!("  {}: {}", colors.emphasis("Base URL"), colors.link(&url_info.base_url));
+  println!("  {}: {}", colors.emphasis("Page ID"), colors.number(&url_info.page_id));
+  if let Some(ref space) = url_info.space_key {
+    println!("  {}: {}", colors.emphasis("Space"), space);
+  }
+
+  // Load credentials
+  let (username, token) = load_credentials(&url_info.base_url, cli)?;
+
+  // Create API client
+  println!("\n{} {}", colors.info("→"), colors.info("Connecting to Confluence"));
+  let client = confluence::ConfluenceClient::new(&url_info.base_url, &username, &token, cli.performance.timeout)?;
+
+  // Fetch the page
+  println!("{} {}", colors.info("→"), colors.info("Fetching page content"));
+  let page = client.get_page(&url_info.page_id)?;
+
+  println!("  {}: {}", colors.emphasis("Title"), colors.emphasis(&page.title));
+  println!("  {}: {}", colors.emphasis("Type"), &page.page_type);
+  println!("  {}: {}", colors.emphasis("Status"), &page.status);
+
+  // Get the storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
+
+  if cli.behavior.verbose > 0 {
+    println!(
+      "  {}: {} characters",
+      colors.dimmed("Content size"),
+      colors.number(storage_content.len())
+    );
+  }
+
+  // Convert to Markdown
+  println!("\n{} {}", colors.info("→"), colors.info("Converting to Markdown"));
+  let markdown = markdown::storage_to_markdown(storage_content)?;
+
+  if cli.behavior.verbose > 0 {
+    println!(
+      "  {}: {} characters",
+      colors.dimmed("Markdown size"),
+      colors.number(markdown.len())
+    );
+  }
+
+  // Create output directory
+  fs::create_dir_all(&cli.output.output)?;
+
+  // Generate filename from page title
+  let filename = sanitize_filename(&page.title);
+  let output_path = Path::new(&cli.output.output).join(format!("{filename}.md"));
+
+  // Check if file exists and handle overwrite
+  if output_path.exists() && !cli.output.overwrite {
+    anyhow::bail!(
+      "File already exists: {}. Use --overwrite to replace it.",
+      output_path.display()
+    );
+  }
+
+  // Write to file
+  println!("\n{} {}", colors.info("→"), colors.info("Writing to disk"));
+  println!("  {}: {}", colors.emphasis("File"), colors.path(output_path.display()));
+
+  fs::write(&output_path, markdown)?;
+
+  Ok(())
+}
+
+/// Load credentials from CLI args, env vars, or .netrc
+fn load_credentials(base_url: &str, cli: &Cli) -> anyhow::Result<(String, String)> {
+  // Try CLI args or env vars first
+  let username = cli.auth.user.clone();
+  let token = cli.auth.token.clone();
+
+  // If both are provided, use them
+  if let (Some(user), Some(tok)) = (username, token) {
+    return Ok((user, tok));
+  }
+
+  // Try to load from .netrc
+  let host = extract_host(base_url).ok_or_else(|| anyhow::anyhow!("Invalid base URL"))?;
+
+  let provider = NetrcProvider::new();
+  if let Some(creds) = provider.get_credentials(&host)? {
+    let user = cli.auth.user.clone().unwrap_or(creds.username);
+    let tok = cli.auth.token.clone().unwrap_or(creds.password);
+    return Ok((user, tok));
+  }
+
+  anyhow::bail!(
+    "Credentials not found. Provide --user and --token, set CONFLUENCE_USER and CONFLUENCE_TOKEN, or add to ~/.netrc"
+  )
+}
+
+/// Sanitize a page title to create a valid filename
+fn sanitize_filename(title: &str) -> String {
+  title
+    .chars()
+    .map(|c| {
+      if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+        c
+      } else {
+        '_'
+      }
+    })
+    .collect::<String>()
+    .replace("  ", " ")
+    .trim()
+    .to_string()
 }
 
 /// Format Unix timestamp as ISO 8601 UTC string
