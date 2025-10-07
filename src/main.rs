@@ -15,6 +15,7 @@ use clap::CommandFactory;
 use clap_complete::{Shell as CompletionShell, generate};
 use cli::{AuthCommand, Cli, Command, Shell};
 use color::ColorScheme;
+use confluence::ConfluenceApi;
 use credentials::{CredentialsProvider, NetrcProvider};
 
 fn main() {

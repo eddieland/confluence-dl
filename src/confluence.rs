@@ -11,6 +11,17 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+/// Trait for Confluence API operations (enables testing with fake
+/// implementations)
+pub trait ConfluenceApi {
+  /// Fetch a page by ID
+  fn get_page(&self, page_id: &str) -> Result<Page>;
+
+  /// Test authentication
+  #[allow(dead_code)]
+  fn test_auth(&self) -> Result<()>;
+}
+
 /// Confluence API client
 pub struct ConfluenceClient {
   base_url: String,
@@ -125,12 +136,10 @@ impl ConfluenceClient {
     let credentials = format!("{}:{}", self.username, self.token);
     format!("Basic {}", BASE64.encode(credentials.as_bytes()))
   }
+}
 
-  /// Fetch a page by ID
-  ///
-  /// # Arguments
-  /// * `page_id` - The numeric page ID
-  pub fn get_page(&self, page_id: &str) -> Result<Page> {
+impl ConfluenceApi for ConfluenceClient {
+  fn get_page(&self, page_id: &str) -> Result<Page> {
     let url = format!(
       "{}/wiki/rest/api/content/{}?expand=body.storage,body.view,space",
       self.base_url, page_id
@@ -157,9 +166,7 @@ impl ConfluenceClient {
     Ok(page)
   }
 
-  /// Test authentication by fetching current user info
-  #[allow(dead_code)]
-  pub fn test_auth(&self) -> Result<()> {
+  fn test_auth(&self) -> Result<()> {
     let url = format!("{}/wiki/rest/api/user/current", self.base_url);
 
     let response = self

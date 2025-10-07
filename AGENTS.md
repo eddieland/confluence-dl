@@ -48,6 +48,11 @@ make release            # Build optimized binary
 - **Snapshot Testing**: Uses [`insta`](Makefile:51-64) for snapshot testing
   - Update snapshots: `make update-snapshots` or `INSTA_UPDATE=1 cargo nextest run`
   - Review snapshots: `make insta-review` or `cargo insta review`
+- **E2E Testing**: Uses stub-based approach with [`FakeConfluenceClient`](tests/common/fake_confluence.rs:17)
+  - See [`tests/README.md`](tests/README.md:1) for comprehensive testing guide
+  - Trait-based design via [`ConfluenceApi`](src/confluence.rs:14) enables dependency injection
+  - Pre-built fixtures in [`tests/common/fixtures.rs`](tests/common/fixtures.rs:1) provide realistic API responses
+  - Fast, simple, and maintainable - no HTTP mocking required
 
 **Installation**: If you don't have nextest installed:
 ```bash

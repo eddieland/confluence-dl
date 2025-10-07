@@ -1,0 +1,158 @@
+//! Fake Confluence API client for testing
+//!
+//! This module provides a stub implementation of the Confluence API that
+//! returns predefined responses without making any network requests.
+
+use std::collections::HashMap;
+
+use anyhow::{Result, anyhow};
+use confluence_dl::confluence::{ConfluenceApi, Page};
+
+use crate::common::fixtures;
+
+/// A fake Confluence client that returns predefined responses for testing
+pub struct FakeConfluenceClient {
+  pages: HashMap<String, Page>,
+  auth_should_succeed: bool,
+}
+
+impl FakeConfluenceClient {
+  /// Create a new fake client with no pages
+  pub fn new() -> Self {
+    Self {
+      pages: HashMap::new(),
+      auth_should_succeed: true,
+    }
+  }
+
+  /// Create a fake client with default sample pages
+  pub fn with_sample_pages() -> Self {
+    let mut client = Self::new();
+
+    // Add sample pages from fixtures
+    client.add_page_from_json("123456", fixtures::sample_page_response());
+    client.add_page_from_json("789012", fixtures::sample_complex_page_response());
+    client.add_page_from_json("345678", fixtures::sample_page_with_links_response());
+    client.add_page_from_json("229483", fixtures::sample_personal_space_page_response());
+    client.add_page_from_json("456789", fixtures::sample_page_with_images_response());
+
+    client
+  }
+
+  /// Add a page from a JSON value
+  pub fn add_page_from_json(&mut self, page_id: &str, json: serde_json::Value) {
+    if let Ok(page) = serde_json::from_value::<Page>(json) {
+      self.pages.insert(page_id.to_string(), page);
+    }
+  }
+
+  /// Add a pre-constructed Page object
+  #[allow(dead_code)]
+  pub fn add_page(&mut self, page_id: &str, page: Page) {
+    self.pages.insert(page_id.to_string(), page);
+  }
+
+  /// Configure whether authentication should succeed
+  pub fn set_auth_success(&mut self, should_succeed: bool) {
+    self.auth_should_succeed = should_succeed;
+  }
+}
+
+impl Default for FakeConfluenceClient {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl ConfluenceApi for FakeConfluenceClient {
+  fn get_page(&self, page_id: &str) -> Result<Page> {
+    self
+      .pages
+      .get(page_id)
+      .cloned()
+      .ok_or_else(|| anyhow!("No content found with id: {}", page_id))
+  }
+
+  fn test_auth(&self) -> Result<()> {
+    if self.auth_should_succeed {
+      Ok(())
+    } else {
+      Err(anyhow!("Authentication failed with status: 401"))
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_fake_client_empty() {
+    let client = FakeConfluenceClient::new();
+    assert!(client.get_page("123456").is_err());
+  }
+
+  #[test]
+  fn test_fake_client_with_samples() {
+    let client = FakeConfluenceClient::with_sample_pages();
+
+    // Should be able to fetch sample pages
+    let page = client.get_page("123456").unwrap();
+    assert_eq!(page.id, "123456");
+    assert_eq!(page.title, "Getting Started Guide");
+
+    // Non-existent page should error
+    assert!(client.get_page("999999").is_err());
+  }
+
+  #[test]
+  fn test_fake_client_add_page() {
+    let mut client = FakeConfluenceClient::new();
+
+    client.add_page_from_json("test123", fixtures::sample_page_response());
+
+    let page = client.get_page("test123").unwrap();
+    assert_eq!(page.title, "Getting Started Guide");
+  }
+
+  #[test]
+  fn test_fake_client_auth_success() {
+    let client = FakeConfluenceClient::new();
+    assert!(client.test_auth().is_ok());
+  }
+
+  #[test]
+  fn test_fake_client_auth_failure() {
+    let mut client = FakeConfluenceClient::new();
+    client.set_auth_success(false);
+    assert!(client.test_auth().is_err());
+  }
+
+  #[test]
+  fn test_fake_client_complex_page() {
+    let client = FakeConfluenceClient::with_sample_pages();
+
+    let page = client.get_page("789012").unwrap();
+    assert_eq!(page.title, "API Documentation");
+    assert!(page.body.is_some());
+
+    let body = page.body.unwrap();
+    assert!(body.storage.is_some());
+
+    let storage = body.storage.unwrap();
+    assert!(storage.value.contains("API Documentation"));
+    assert!(storage.value.contains("code"));
+  }
+
+  #[test]
+  fn test_fake_client_page_with_space() {
+    let client = FakeConfluenceClient::with_sample_pages();
+
+    let page = client.get_page("123456").unwrap();
+    assert!(page.space.is_some());
+
+    let space = page.space.unwrap();
+    assert_eq!(space.key, "DOCS");
+    assert_eq!(space.name, "Documentation");
+  }
+}
