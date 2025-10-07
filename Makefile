@@ -12,11 +12,11 @@ help: ## Display this help
 .PHONY: fmt
 fmt: ## Format code using rustfmt
 	cargo fmt --all
-	cargo clippy --fix --allow-dirty --workspace
+	cargo clippy --fix --allow-dirty
 
 .PHONY: lint
 lint: ## Run clippy for linting
-	cargo clippy --workspace -- -D warnings
+	cargo clippy -- -D warnings
 
 .PHONY: lint-all
 lint-all: ## Run clippy with all features
@@ -24,19 +24,19 @@ lint-all: ## Run clippy with all features
 
 .PHONY: test
 test: build ## Run tests
-	cargo nextest run
+	cargo nextest run --all-targets
 
 .PHONY: check
 check: ## Run cargo check
-	cargo check --workspace
+	cargo check
 
 .PHONY: doc
 doc: ## Generate documentation
-	cargo doc --workspace --no-deps
+	cargo doc --no-deps
 
 .PHONY: watch-test
 watch-test: ## Run tests in watch mode (requires cargo-watch)
-	cargo watch -x "nextest run --workspace"
+	cargo watch -x "nextest run --all-targets"
 
 .PHONY: all
 all: fmt lint test ## Run fmt, lint, and test
@@ -45,19 +45,19 @@ all: fmt lint test ## Run fmt, lint, and test
 
 .PHONY: insta-review
 insta-review: ## Review Insta snapshots
-	cargo insta review --workspace
+	cargo insta review
 
 .PHONY: insta-accept
 insta-accept: ## Accept all pending Insta snapshots
-	cargo insta accept --workspace
+	cargo insta accept
 
 .PHONY: insta-reject
 insta-reject: ## Reject all pending Insta snapshots
-	cargo insta reject --workspace
+	cargo insta reject
 
 .PHONY: update-snapshots
 update-snapshots: ## Run tests and update snapshots
-	INSTA_UPDATE=1 cargo nextest run --workspace
+	INSTA_UPDATE=1 cargo nextest run
 
 ### Analysis
 
@@ -67,37 +67,19 @@ cloc: ## Count lines of code using Docker
 		--exclude-dir=.git,.github,example,docs,ref,target \
 		--fullpath
 
-### Coverage
-
-.PHONY: coverage
-coverage: ## Run code coverage
-	cargo llvm-cov nextest --workspace
-
-.PHONY: coverage-html
-coverage-html: ## Generate HTML coverage report
-	cargo llvm-cov nextest --workspace --html
-
-.PHONY: coverage-open
-coverage-open: ## Generate HTML coverage report and open it in browser
-	cargo llvm-cov nextest --workspace --html --open
-
-.PHONY: coverage-report
-coverage-report: ## Generate LCOV report
-	cargo llvm-cov nextest --workspace --lcov --output-path lcov.info
-
 ### Build
 
 .PHONY: build
 build: ## Build the project
-	cargo build --workspace
+	cargo build
 
 .PHONY: release
 release: ## Build release version
-	cargo build --release --workspace
+	cargo build --release
 
 .PHONY: release-size
 release-size: ## Build size-optimized release version
-	cargo build --release --workspace
+	cargo build --release
 	@echo "\nBinary size before compression:"
 	@du -h target/release/confluence-dl
 
@@ -107,4 +89,4 @@ clean: ## Clean build artifacts
 
 .PHONY: run
 run: ## Run the application
-	cargo run --workspace
+	cargo run

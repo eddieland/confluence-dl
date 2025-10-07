@@ -215,9 +215,10 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
 fn find_child_by_tag<'a>(element: &'a scraper::ElementRef, tag_name: &str) -> Option<scraper::ElementRef<'a>> {
   for child in element.children() {
     if let Node::Element(elem) = child.value()
-      && elem.name() == tag_name {
-        return scraper::ElementRef::wrap(child);
-      }
+      && elem.name() == tag_name
+    {
+      return scraper::ElementRef::wrap(child);
+    }
   }
   None
 }
@@ -232,10 +233,11 @@ fn find_child_by_tag_and_attr<'a>(
   for child in element.children() {
     if let Node::Element(elem) = child.value()
       && elem.name() == tag_name
-        && let Some(child_elem) = scraper::ElementRef::wrap(child)
-          && child_elem.value().attr(attr_name) == Some(attr_value) {
-            return Some(child_elem);
-          }
+      && let Some(child_elem) = scraper::ElementRef::wrap(child)
+      && child_elem.value().attr(attr_name) == Some(attr_value)
+    {
+      return Some(child_elem);
+    }
   }
   None
 }
@@ -248,18 +250,19 @@ fn convert_task_list_to_markdown(element: &scraper::ElementRef) -> String {
   for child in element.children() {
     if let Node::Element(elem) = child.value()
       && elem.name() == "ac:task"
-        && let Some(task) = scraper::ElementRef::wrap(child) {
-          let status = find_child_by_tag(&task, "ac:task-status")
-            .map(|e| e.text().collect::<String>())
-            .unwrap_or_else(|| "incomplete".to_string());
+      && let Some(task) = scraper::ElementRef::wrap(child)
+    {
+      let status = find_child_by_tag(&task, "ac:task-status")
+        .map(|e| e.text().collect::<String>())
+        .unwrap_or_else(|| "incomplete".to_string());
 
-          let body = find_child_by_tag(&task, "ac:task-body")
-            .map(|e| get_element_text(&e))
-            .unwrap_or_default();
+      let body = find_child_by_tag(&task, "ac:task-body")
+        .map(|e| get_element_text(&e))
+        .unwrap_or_default();
 
-          let checkbox = if status.trim() == "complete" { "[x]" } else { "[ ]" };
-          result.push_str(&format!("- {} {}\n", checkbox, body.trim()));
-        }
+      let checkbox = if status.trim() == "complete" { "[x]" } else { "[ ]" };
+      result.push_str(&format!("- {} {}\n", checkbox, body.trim()));
+    }
   }
 
   result.push('\n');
