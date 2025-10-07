@@ -39,14 +39,15 @@ make release            # Build optimized binary
 
 ### Testing Strategy
 
-**⚠️ IMPORTANT: This project ONLY supports `cargo nextest` for running tests. Standard `cargo test` is NOT supported and should NOT be used.**
+**⚠️ CRITICAL: This project ONLY supports `cargo nextest` for running tests. Standard `cargo test` is NOT supported and should NOT be used.**
 
 - **Test Runner**: [`cargo-nextest`](Makefile:27) is the ONLY supported test runner
   - `cargo nextest` is faster, more reliable, and better integrated with our tooling
   - Do NOT use `cargo test` - it is explicitly not supported in this project
+- **Test Location**: Tests live alongside implementation (unit tests) or in `tests/` (integration tests)
 - **Snapshot Testing**: Uses [`insta`](Makefile:51-64) for snapshot testing
   - Update snapshots: `make update-snapshots` or `INSTA_UPDATE=1 cargo nextest run`
-  - Review snapshots: `make insta-review`
+  - Review snapshots: `make insta-review` or `cargo insta review`
 
 **Installation**: If you don't have nextest installed:
 ```bash
@@ -81,35 +82,13 @@ cargo install cargo-nextest --locked
 ## Code Patterns
 
 ### Error Handling
-No error handling patterns established yet. When implementing:
-- Use `anyhow` or `thiserror` for error types (add to Cargo.toml)
+When implementing error handling:
+- Use `anyhow` or `thiserror` for error types
 - Return `Result<T, E>` from fallible functions
 - Use `?` operator for error propagation
 
-### CLI Structure (Planned)
-Current dependencies indicate CLI will use:
-- [`clap`](Cargo.toml:10) v4 with derive macros for argument parsing
-- [`clap_complete`](Cargo.toml:11) for shell completion generation
-
-Example CLI structure (not yet implemented):
-```rust
-use clap::Parser;
-
-#[derive(Parser)]
-#[command(version, about)]
-struct Cli {
-    // Define commands here
-}
-```
-
-### Testing Conventions
-
-**⚠️ CRITICAL: Always use `cargo nextest run`, NEVER use `cargo test`**
-
-- Tests live alongside implementation (unit tests) or in `tests/` (integration tests)
-- Run tests via `make test` or `cargo nextest run` - **DO NOT use `cargo test`**
-- Snapshot tests use [`insta`](https://insta.rs) - review with `cargo insta review`
-- All test commands in this project assume nextest is available
+### CLI Structure
+Uses [`clap`](Cargo.toml:10) v4 with derive macros for argument parsing and [`clap_complete`](Cargo.toml:11) for shell completion. See [`src/cli.rs`](src/cli.rs:1) for the complete CLI implementation.
 
 ## Common Tasks
 
@@ -123,11 +102,6 @@ cargo add --dev <crate>        # Add dev dependency
 ```bash
 cargo run -- <args>            # Pass args after --
 cargo run -- --help            # Test CLI help
-```
-
-### Before Committing
-```bash
-make all                       # Runs fmt, lint, test
 ```
 
 ### Debugging Builds
@@ -152,14 +126,131 @@ Based on [README.md](README.md:1):
 - **Not Implemented**: Core functionality (Confluence API client, Markdown conversion, file I/O)
 - **Next Steps**: Implement CLI argument parsing, Confluence API client, page fetching
 
+## Color and Visual Design
+
+The application uses a comprehensive color system to improve user experience and "feel". Colors are used semantically to convey meaning and guide user attention.
+
+### Color Module ([`src/color.rs`](src/color.rs:1))
+
+The [`ColorScheme`](src/color.rs:13) struct provides semantic color methods that respect user preferences:
+- Automatically detects terminal capabilities
+- Respects `--color` flag (auto/always/never)
+- Falls back gracefully when colors are disabled
+
+### Semantic Color Methods
+
+Use these methods instead of raw ANSI codes:
+
+| Method | Color | Use For | Example |
+|--------|-------|---------|---------|
+| [`success()`](src/color.rs:41) | Green | Successful operations, confirmations | "✓ Downloaded 5 pages" |
+| [`error()`](src/color.rs:50) | Bright Red (bold) | Error messages, failures | "✗ Failed to connect" |
+| [`warning()`](src/color.rs:59) | Yellow | Warnings, cautionary messages | "⚠ File already exists" |
+| [`info()`](src/color.rs:68) | Cyan | Informational messages | "Fetching page metadata..." |
+| [`debug()`](src/color.rs:77) | Bright Black (gray) | Debug/verbose output | "API response: 200 OK" |
+| [`emphasis()`](src/color.rs:86) | Bright White (bold) | Important text, headers | "Authentication:" |
+| [`link()`](src/color.rs:95) | Blue (underlined) | URLs, clickable items | "https://confluence.example.com" |
+| [`path()`](src/color.rs:104) | Magenta | File paths, directories | "./output/page.md" |
+| [`number()`](src/color.rs:113) | Bright Blue | Numbers, metrics, counts | "42 pages" |
+| [`code()`](src/color.rs:122) | Bright Green | Code snippets, commands | "`confluence-dl --help`" |
+| [`dimmed()`](src/color.rs:131) | Gray (dimmed) | Secondary/less important text | "(optional)" |
+| [`progress()`](src/color.rs:140) | Bright Cyan | Progress indicators, ongoing tasks | "Downloading..." |
+
+### Best Practices for Color Usage
+
+1. **Always Use Semantic Methods**
+   ```rust
+   // ✓ GOOD - Semantic and meaningful
+   println!("{} {}", colors.success("✓"), colors.info("Download complete"));
+
+   // ✗ BAD - Raw colors without meaning
+   println!("\x1b[32m✓\x1b[0m Download complete");
+   ```
+
+2. **Respect User Preferences**
+   ```rust
+   // ✓ GOOD - ColorScheme respects --color flag
+   let colors = ColorScheme::new(cli.behavior.color);
+   println!("{}", colors.error("Connection failed"));
+
+   // ✗ BAD - Forces colors regardless of user preference
+   println!("\x1b[31mConnection failed\x1b[0m");
+   ```
+
+3. **Never Rely Solely on Color**
+   ```rust
+   // ✓ GOOD - Icon + color conveys meaning
+   println!("{} {}", colors.success("✓"), colors.info("Success"));
+
+   // ✗ BAD - Only color, no visual indicator
+   println!("{}", colors.success("Success"));
+   ```
+
+4. **Consistent Color Meanings**
+   - Green = Success, positive outcomes
+   - Red = Errors, failures, stop
+   - Yellow = Warnings, caution
+   - Blue/Cyan = Information, links
+   - Magenta = Files/paths
+   - Gray = Diminished importance
+
+5. **Accessibility Considerations**
+   - Always include icons or text indicators (✓, ✗, ⚠, →)
+   - Ensure good contrast for readability
+   - Test with both light and dark terminal backgrounds
+   - Color should enhance, not replace, textual information
+
+### Clap Color Styling
+
+The CLI help output uses custom colors defined in [`get_clap_styles()`](src/cli.rs:266):
+- **Headers/Usage**: Bright Yellow + Bold
+- **Literals** (commands, flags): Bright Green
+- **Placeholders** (<args>): Bright Cyan
+- **Errors**: Bright Red + Bold
+- **Valid values**: Bright Green
+- **Invalid values**: Bright Red
+
+These colors create a consistent, professional appearance for `--help` output.
+
+### Example: Complete Feature with Colors
+
+```rust
+fn download_page(url: &str, cli: &Cli, colors: &ColorScheme) {
+  // Progress indicator
+  println!("{} {}", colors.progress("→"), colors.info("Downloading page..."));
+  println!("  {}: {}", colors.emphasis("URL"), colors.link(url));
+
+  match fetch_page(url) {
+    Ok(page) => {
+      // Success with metrics
+      println!("{} {}", colors.success("✓"), colors.info("Download complete"));
+      println!("  {}: {}", colors.emphasis("Size"), colors.number(page.size));
+      println!("  {}: {}", colors.emphasis("Output"), colors.path(&cli.output.output));
+    }
+    Err(e) => {
+      // Error with details
+      eprintln!("{} {}", colors.error("✗"), colors.error("Download failed"));
+      eprintln!("  {}: {}", colors.emphasis("Reason"), e);
+      eprintln!("  {}", colors.dimmed("Hint: Check your network connection"));
+    }
+  }
+}
+```
+
+### Testing Colors
+
+When adding new output:
+1. Test with `--color=always` to verify colors appear correct
+2. Test with `--color=never` to ensure output is still readable
+3. Test with both light and dark terminal backgrounds
+4. Verify icons render correctly in your terminal font
+
 ## Tips for AI Agents
 
-1. **NEVER use `cargo test`** - This project ONLY supports `cargo nextest run`. Always use `make test` or `cargo nextest run`
-2. **Always run `make all`** before suggesting changes are complete
-3. **Respect the 120-char line limit** - rustfmt will enforce this
-4. **Use 2-space indentation** - project uses 2 spaces, not Rust's typical 4
-5. **Write descriptive doc comments** - explain the "why" not just the "what"
-6. **Keep functions under 100 lines** - clippy enforces this
-7. **Group imports properly** - std, external crates, then local (rustfmt handles this)
-8. **Add tests alongside new features** - use `#[cfg(test)]` modules
-9. **When adding features**, update the appropriate section of this file
+1. **Always use `cargo nextest run`**, never `cargo test` - see Testing Strategy section
+2. **Run `make all`** (fmt + lint + test) before suggesting changes are complete
+3. **Write descriptive doc comments** - explain the "why" not just the "what"
+4. **Add tests alongside new features** - use `#[cfg(test)]` modules
+5. **When adding features**, update the appropriate section of this file
+
+Note: Formatting and linting rules are enforced automatically by rustfmt and clippy (see Rust-Specific Conventions section).
