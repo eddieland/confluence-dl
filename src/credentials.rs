@@ -302,4 +302,377 @@ default
     assert_eq!(cred1, cred2);
     assert_ne!(cred1, cred3);
   }
+
+  // Edge case tests
+
+  #[test]
+  fn test_parse_netrc_empty_file() {
+    let content = "";
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_only_whitespace() {
+    let content = "   \n\t\n  \n";
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_only_comments() {
+    let content = r#"
+# Comment line 1
+# Comment line 2
+    # Indented comment
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_missing_login() {
+    let content = r#"
+machine example.com
+  password pass1
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_missing_password() {
+    let content = r#"
+machine example.com
+  login user1
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_missing_both_credentials() {
+    let content = r#"
+machine example.com
+machine other.com
+  login user2
+  password pass2
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_machine_without_hostname() {
+    let content = r#"
+machine
+  login user1
+  password pass1
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_single_line_format() {
+    // Note: Current parser processes one keyword per line, so single-line
+    // format with multiple keywords is not fully supported
+    let content = "machine example.com login user1 password pass1";
+    let result = parse_netrc(content, "example.com").unwrap();
+    // Parser only captures "machine example.com" from this line
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_mixed_whitespace() {
+    // Parser handles tabs and spaces in whitespace, but only processes
+    // one keyword per line
+    let content = "machine\texample.com\nlogin\t\tuser1\npassword   pass1";
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user1");
+    assert_eq!(cred.password, "pass1");
+  }
+
+  #[test]
+  fn test_parse_netrc_reverse_order_login_password() {
+    let content = r#"
+machine example.com
+  password pass1
+  login user1
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user1");
+    assert_eq!(cred.password, "pass1");
+  }
+
+  #[test]
+  fn test_parse_netrc_email_as_username() {
+    let content = r#"
+machine example.atlassian.net
+  login user@example.com
+  password api-token-123
+"#;
+    let result = parse_netrc(content, "example.atlassian.net").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user@example.com");
+    assert_eq!(cred.password, "api-token-123");
+  }
+
+  #[test]
+  fn test_parse_netrc_complex_password() {
+    let content = r#"
+machine example.com
+  login user1
+  password P@ssw0rd!#$%^&*()
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.password, "P@ssw0rd!#$%^&*()");
+  }
+
+  #[test]
+  fn test_parse_netrc_duplicate_machines_returns_first() {
+    let content = r#"
+machine example.com
+  login user1
+  password pass1
+
+machine example.com
+  login user2
+  password pass2
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user1");
+    assert_eq!(cred.password, "pass1");
+  }
+
+  #[test]
+  fn test_parse_netrc_specific_machine_overrides_default() {
+    let content = r#"
+default
+  login defaultuser
+  password defaultpass
+
+machine example.com
+  login specificuser
+  password specificpass
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "specificuser");
+    assert_eq!(cred.password, "specificpass");
+  }
+
+  #[test]
+  fn test_parse_netrc_default_after_specific() {
+    // Note: When the parser encounters a new machine or default entry,
+    // it overwrites the previous entry's state without checking if it should
+    // return the previous entry first. So the "default" entry overwrites
+    // the "specific.com" entry.
+    let content = r#"
+machine specific.com
+  login specificuser
+  password specificpass
+
+default
+  login defaultuser
+  password defaultpass
+"#;
+    // The default entry overwrites specific.com, so both queries get default
+    let result = parse_netrc(content, "specific.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "defaultuser");
+    assert_eq!(cred.password, "defaultpass");
+
+    // Should also match default for non-specific host
+    let result = parse_netrc(content, "any-host.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "defaultuser");
+    assert_eq!(cred.password, "defaultpass");
+  }
+
+  #[test]
+  fn test_parse_netrc_unknown_tokens_ignored() {
+    let content = r#"
+machine example.com
+  login user1
+  unknown_field value
+  password pass1
+  another_unknown another_value
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user1");
+    assert_eq!(cred.password, "pass1");
+  }
+
+  #[test]
+  fn test_parse_netrc_login_without_value() {
+    let content = r#"
+machine example.com
+  login
+  password pass1
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_password_without_value() {
+    let content = r#"
+machine example.com
+  login user1
+  password
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_case_sensitive_hostname() {
+    let content = r#"
+machine Example.com
+  login user1
+  password pass1
+"#;
+    // Should not match lowercase
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+
+    // Should match exact case
+    let result = parse_netrc(content, "Example.com").unwrap();
+    assert!(result.is_some());
+  }
+
+  #[test]
+  fn test_parse_netrc_multiple_credentials_same_line() {
+    // Current parser processes one keyword per line by only looking at parts[0].
+    // So when all keywords are on a single line, only the first keyword is
+    // processed.
+    let content = "machine example.com login user1 password pass1 machine other.com login user2 password pass2";
+
+    // Parser only sees "machine example.com" from this line, the rest is ignored
+    // No login/password found, so returns None
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_none());
+
+    let result = parse_netrc(content, "other.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_trailing_whitespace() {
+    let content = r#"
+machine example.com
+  login user1
+  password pass1
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user1");
+    assert_eq!(cred.password, "pass1");
+  }
+
+  #[test]
+  fn test_parse_netrc_leading_whitespace_before_machine() {
+    let content = r#"
+    machine example.com
+      login user1
+      password pass1
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+  }
+
+  #[test]
+  fn test_parse_netrc_unicode_in_credentials() {
+    let content = r#"
+machine example.com
+  login user_日本語
+  password pàsswørd_🔑
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user_日本語");
+    assert_eq!(cred.password, "pàsswørd_🔑");
+  }
+
+  #[test]
+  fn test_parse_netrc_incomplete_entry_at_eof() {
+    let content = r#"
+machine complete.com
+  login user1
+  password pass1
+
+machine incomplete.com
+  login user2
+"#;
+    // Complete entry should work
+    let result = parse_netrc(content, "complete.com").unwrap();
+    assert!(result.is_some());
+
+    // Incomplete entry should return None
+    let result = parse_netrc(content, "incomplete.com").unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_parse_netrc_macdef_ignored() {
+    let content = r#"
+machine example.com
+  login user1
+  password pass1
+
+macdef init
+cd /pub
+mget *
+quit
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user1");
+    assert_eq!(cred.password, "pass1");
+  }
+
+  #[test]
+  fn test_parse_netrc_extra_tokens_after_values() {
+    let content = r#"
+machine example.com extra tokens ignored
+  login user1 extra
+  password pass1 tokens ignored
+"#;
+    let result = parse_netrc(content, "example.com").unwrap();
+    assert!(result.is_some());
+
+    let cred = result.unwrap();
+    assert_eq!(cred.username, "user1");
+    assert_eq!(cred.password, "pass1");
+  }
 }
