@@ -1,0 +1,18 @@
+# Clippy configuration
+# See all lints at: https://rust-lang.github.io/rust-clippy/master/
+
+# Configure msrv (Minimum Supported Rust Version)
+msrv = "1.88.0"
+
+disallowed-methods = []
+cognitive-complexity-threshold = 25
+too-many-arguments-threshold = 7
+too-many-lines-threshold = 100
+enum-variant-size-threshold = 200
+type-complexity-threshold = 250
+allowed-duplicate-crates = []
+
+# Allow these identifiers in doc comments without requiring backticks
+# This prevents Clippy from flagging proper nouns, acronyms, and common technical terms
+# that shouldn't be formatted as code identifiers
+doc-valid-idents = ["GitHub", "Confluence"]
