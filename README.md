@@ -71,7 +71,7 @@ confluence-dl --url https://your-domain.atlassian.net \
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.90 or later
 - Cargo
 - **cargo-nextest** (required for running tests)
 
