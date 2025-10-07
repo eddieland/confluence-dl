@@ -39,6 +39,7 @@ pub enum CredentialError {
   /// The .netrc file could not be found or read
   NetrcNotFound,
   /// The .netrc file is malformed or could not be parsed
+  #[allow(dead_code)]
   NetrcParseError(String),
   /// An I/O error occurred while reading credentials
   IoError(std::io::Error),

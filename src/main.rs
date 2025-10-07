@@ -4,6 +4,7 @@
 
 mod cli;
 mod color;
+mod credentials;
 
 use std::{io, process};
 
@@ -11,6 +12,7 @@ use clap::CommandFactory;
 use clap_complete::{Shell as CompletionShell, generate};
 use cli::{AuthCommand, Cli, Command, Shell};
 use color::ColorScheme;
+use credentials::{CredentialsProvider, NetrcProvider};
 
 fn main() {
   let cli = Cli::parse_args();
@@ -77,35 +79,157 @@ fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &ColorScheme
       eprintln!("{} Authentication testing not yet implemented", colors.warning("Note:"));
     }
     AuthCommand::Show => {
-      println!("{}", colors.emphasis("Authentication Configuration:"));
-      // TODO: Implement authentication configuration display
-      // 1. Determine source (CLI, env, .netrc)
-      // 2. Display URL, user, and masked token
-      // 3. Show token length and source
-      println!(
-        "  {}: {}",
-        colors.emphasis("URL"),
-        colors.link(cli.auth.url.as_deref().unwrap_or("(not set)"))
-      );
-      println!(
-        "  {}: {}",
-        colors.emphasis("User"),
-        cli.auth.user.as_deref().unwrap_or("(not set)")
-      );
-      if let Some(ref token) = cli.auth.token {
-        println!(
-          "  {}: {} ({} chars)",
-          colors.emphasis("Token"),
-          colors.dimmed("*".repeat(8)),
-          colors.number(token.len())
-        );
-      } else {
-        println!("  {}: {}", colors.emphasis("Token"), colors.dimmed("(not set)"));
-      }
-      eprintln!(
-        "{} Full authentication configuration display not yet implemented",
-        colors.warning("Note:")
-      );
+      show_auth_config(cli, colors);
+    }
+  }
+}
+
+/// Display authentication configuration with source information
+fn show_auth_config(cli: &Cli, colors: &ColorScheme) {
+  println!("{}\n", colors.emphasis("Authentication Configuration"));
+
+  // Determine the base URL
+  let url = cli.auth.url.as_deref();
+  let url_source = if std::env::var("CONFLUENCE_URL").is_ok() {
+    "environment variable"
+  } else if url.is_some() {
+    "command-line flag"
+  } else {
+    "not set"
+  };
+
+  if let Some(url_value) = url {
+    println!("{}: {}", colors.emphasis("Base URL"), colors.link(url_value));
+    println!("  {}: {}", colors.dimmed("Source"), colors.dimmed(url_source));
+  } else {
+    println!("{}: {}", colors.emphasis("Base URL"), colors.dimmed("(not set)"));
+  }
+
+  // Determine username source
+  let username = cli.auth.user.as_deref();
+  let user_source = if std::env::var("CONFLUENCE_USER").is_ok() {
+    "environment variable"
+  } else if username.is_some() {
+    "command-line flag"
+  } else {
+    "not set"
+  };
+
+  // Determine token source
+  let token = cli.auth.token.as_deref();
+  let token_source = if std::env::var("CONFLUENCE_TOKEN").is_ok() {
+    "environment variable"
+  } else if token.is_some() {
+    "command-line flag"
+  } else {
+    "not set"
+  };
+
+  // Try to get credentials from .netrc if URL is provided but user/token are not
+  let netrc_creds = if username.is_none() || token.is_none() {
+    url.and_then(extract_host).and_then(|host| {
+      let provider = NetrcProvider::new();
+      provider.get_credentials(&host).ok().flatten()
+    })
+  } else {
+    None
+  };
+
+  // Display username
+  if let Some(user_value) = username {
+    println!("\n{}: {}", colors.emphasis("Username"), user_value);
+    println!("  {}: {}", colors.dimmed("Source"), colors.dimmed(user_source));
+  } else if let Some(ref creds) = netrc_creds {
+    println!("\n{}: {}", colors.emphasis("Username"), creds.username);
+    println!("  {}: {}", colors.dimmed("Source"), colors.dimmed(".netrc file"));
+  } else {
+    println!("\n{}: {}", colors.emphasis("Username"), colors.dimmed("(not set)"));
+  }
+
+  // Display token
+  if let Some(token_value) = token {
+    let masked = if token_value.len() > 8 {
+      format!("{}{}", &token_value[..4], "*".repeat(token_value.len() - 4))
+    } else {
+      "*".repeat(token_value.len())
+    };
+    println!("\n{}: {}", colors.emphasis("API Token"), colors.dimmed(&masked));
+    println!(
+      "  {}: {} characters",
+      colors.dimmed("Length"),
+      colors.number(token_value.len())
+    );
+    println!("  {}: {}", colors.dimmed("Source"), colors.dimmed(token_source));
+  } else if netrc_creds.is_some() {
+    // We have a password from .netrc but don't show it
+    println!("\n{}: {}", colors.emphasis("API Token"), colors.dimmed("********"));
+    println!("  {}: {}", colors.dimmed("Source"), colors.dimmed(".netrc file"));
+  } else {
+    println!("\n{}: {}", colors.emphasis("API Token"), colors.dimmed("(not set)"));
+  }
+
+  // Display .netrc information if found
+  if netrc_creds.is_some() && (username.is_none() || token.is_none()) {
+    println!("\n{} Credentials found in .netrc", colors.info("ℹ"));
+    if let Some(host) = url.and_then(extract_host) {
+      println!("  {}: {}", colors.dimmed("Host"), host);
+    }
+  }
+
+  // Display warnings if credentials are incomplete
+  if url.is_none() {
+    println!(
+      "\n{} {} is required for API access",
+      colors.warning("⚠"),
+      colors.emphasis("Base URL")
+    );
+    println!("  Set via --url flag or CONFLUENCE_URL environment variable");
+  }
+
+  let has_username = username.is_some() || netrc_creds.is_some();
+  let has_token = token.is_some() || netrc_creds.is_some();
+
+  if !has_username || !has_token {
+    println!(
+      "\n{} {} for API access",
+      colors.warning("⚠"),
+      colors.warning("Credentials incomplete")
+    );
+    if !has_username {
+      println!("  Missing: username (use --user or CONFLUENCE_USER)");
+    }
+    if !has_token {
+      println!("  Missing: API token (use --token or CONFLUENCE_TOKEN)");
+    }
+    println!("\n  Or add credentials to ~/.netrc:");
+    if let Some(url_str) = url
+      && let Some(host) = extract_host(url_str)
+    {
+      println!("    machine {host}");
+    }
+    println!("      login your.email@example.com");
+    println!("      password your-api-token");
+  } else {
+    println!("\n{} {}", colors.success("✓"), colors.success("Credentials configured"));
+  }
+}
+
+/// Extract hostname from a URL string
+fn extract_host(url: &str) -> Option<String> {
+  // Simple URL parsing to extract the host
+  if let Some(start) = url.find("://") {
+    let after_scheme = &url[start + 3..];
+    if let Some(end) = after_scheme.find('/') {
+      Some(after_scheme[..end].to_string())
+    } else {
+      Some(after_scheme.to_string())
+    }
+  } else {
+    // No scheme, assume it's just a host
+    if let Some(end) = url.find('/') {
+      Some(url[..end].to_string())
+    } else {
+      Some(url.to_string())
     }
   }
 }

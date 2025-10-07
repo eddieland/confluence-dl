@@ -46,19 +46,19 @@ confluence-dl [OPTIONS] <PAGE_URL_OR_ID>
 
 ```bash
 # Download by full URL
-confluence-dl https://example.atlassian.net/wiki/spaces/MYSPACE/pages/123456/My+Page
+confluence-dl https://eddieland.atlassian.net/wiki/spaces/MYSPACE/pages/123456/My+Page
 
 # Download by page ID (requires --url flag for base URL)
-confluence-dl 123456 --url https://example.atlassian.net
+confluence-dl 123456 --url https://eddieland.atlassian.net
 
 # Download with children (recursive)
-confluence-dl 123456 --url https://example.atlassian.net --children
+confluence-dl 123456 --url https://eddieland.atlassian.net --children
 
 # Limit recursion depth
-confluence-dl https://example.atlassian.net/wiki/pages/123456 --children --max-depth 2
+confluence-dl https://eddieland.atlassian.net/wiki/pages/123456 --children --max-depth 2
 
 # Include attachments and comments
-confluence-dl https://example.atlassian.net/wiki/pages/123456 --attachments --comments
+confluence-dl https://eddieland.atlassian.net/wiki/pages/123456 --attachments --comments
 ```
 
 ### Page-Specific Options
@@ -101,13 +101,13 @@ confluence-dl auth test [OPTIONS]
 confluence-dl auth test
 
 # Test with explicit credentials
-confluence-dl auth test --url https://example.atlassian.net --user user@example.com --token mytoken
+confluence-dl auth test --url https://eddieland.atlassian.net --user user@example.com --token mytoken
 ```
 
 **Output:**
 
 ```
-✓ Successfully authenticated to https://example.atlassian.net
+✓ Successfully authenticated to https://eddieland.atlassian.net
   User: user@example.com
   Account ID: 557058:abc123...
   Display Name: John Doe
@@ -126,7 +126,7 @@ confluence-dl auth show
 ```
 Authentication Configuration:
   Source: .netrc file
-  URL: https://example.atlassian.net
+  URL: https://eddieland.atlassian.net
   User: user@example.com
   Token: ******** (8 chars, from .netrc)
 ```
@@ -306,20 +306,20 @@ confluence-dl --help-all       # Show all options and subcommands
 #### Quick Single Page Export
 
 ```bash
-confluence-dl https://example.atlassian.net/wiki/spaces/DOCS/pages/123456/Getting+Started
+confluence-dl https://eddieland.atlassian.net/wiki/spaces/DOCS/pages/123456/Getting+Started
 ```
 
 #### Download Page Tree (with children)
 
 ```bash
-confluence-dl https://example.atlassian.net/wiki/pages/123456 --children --max-depth 3
+confluence-dl https://eddieland.atlassian.net/wiki/pages/123456 --children --max-depth 3
 ```
 
 #### Full Documentation Backup
 
 ```bash
 confluence-dl 123456 \
-  --url https://example.atlassian.net \
+  --url https://eddieland.atlassian.net \
   --children \
   --attachments \
   --download-images \
@@ -330,7 +330,7 @@ confluence-dl 123456 \
 
 ```bash
 confluence-dl 123456 \
-  --url https://example.atlassian.net \
+  --url https://eddieland.atlassian.net \
   --user user@example.com \
   --token mytoken \
   --children \
@@ -344,13 +344,13 @@ confluence-dl 123456 \
 confluence-dl auth test
 
 # Then export
-confluence-dl https://example.atlassian.net/wiki/pages/123456
+confluence-dl https://eddieland.atlassian.net/wiki/pages/123456
 ```
 
 #### Dry Run to Preview
 
 ```bash
-confluence-dl 123456 --url https://example.atlassian.net --children --dry-run -v
+confluence-dl 123456 --url https://eddieland.atlassian.net --children --dry-run -v
 ```
 
 ## Error Handling
@@ -370,7 +370,7 @@ All errors should be clear and actionable:
 
 ```
 Error: Failed to authenticate to Confluence
-  URL: https://example.atlassian.net
+  URL: https://eddieland.atlassian.net
   User: user@example.com
 
 Suggestion:
