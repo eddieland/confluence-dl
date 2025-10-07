@@ -2,7 +2,7 @@
 # See all lints at: https://rust-lang.github.io/rust-clippy/master/
 
 # Configure msrv (Minimum Supported Rust Version)
-msrv = "1.88.0"
+msrv = "1.90.0"
 
 disallowed-methods = []
 cognitive-complexity-threshold = 25

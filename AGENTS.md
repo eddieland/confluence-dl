@@ -69,7 +69,7 @@ cargo install cargo-nextest --locked
 - **Line endings**: Unix (LF)
 
 ### Linting Configuration ([.clippy.toml](.clippy.toml:1))
-- **MSRV**: 1.88.0 (enforce this minimum version)
+- **MSRV**: 1.90.0 (enforce this minimum version)
 - **Cognitive complexity**: Max 25 per function
 - **Function arguments**: Max 7 parameters
 - **Function length**: Max 100 lines

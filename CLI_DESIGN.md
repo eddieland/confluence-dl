@@ -164,7 +164,7 @@ confluence-dl 0.1.0
 Git commit: a1b2c3d
 Built: 2025-10-07 21:30:42 UTC
 Target: x86_64-unknown-linux-gnu
-Rust version: 1.88.0
+Rust version: 1.90.0
 ```
 
 **Output (JSON):**
@@ -175,7 +175,7 @@ Rust version: 1.88.0
   "git_commit": "a1b2c3d",
   "build_timestamp": "2025-10-07T21:30:42Z",
   "target": "x86_64-unknown-linux-gnu",
-  "rust_version": "1.88.0"
+  "rust_version": "1.90.0"
 }
 ```
 
