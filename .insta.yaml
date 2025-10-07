@@ -1,0 +1,41 @@
+# Insta configuration file
+
+test:
+  runner: nextest
+  auto_accept_unseen: true
+
+# Review settings
+review:
+  # Open the review tool in a new window
+  open_in_new_window: true
+  # Automatically accept snapshots when running in CI
+  ci_accept: true
+
+# Snapshot settings
+snapshot:
+  # Use the inline snapshot format for small snapshots
+  inline: true
+  # The maximum size for inline snapshots (in bytes)
+  inline_snapshot_max_size: 100
+  # Enforce that all snapshots have descriptions
+  description_hint: true
+  # Sort keys in JSON snapshots
+  sort_maps: true
+
+# Output settings
+output:
+  # Show colors in output
+  color: true
+  # Show diffs when snapshots don't match
+  diff: true
+  # Show contextual information around diffs
+  contextual_diffs: true
+  # Number of context lines to show
+  diff_context: 3
+
+# Filtering settings
+filter:
+  # Paths to exclude from snapshot testing
+  exclude:
+    - "target/"
+    - ".git/"
