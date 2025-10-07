@@ -73,6 +73,14 @@ confluence-dl --url https://your-domain.atlassian.net \
 
 - Rust 1.70 or later
 - Cargo
+- **cargo-nextest** (required for running tests)
+
+**⚠️ IMPORTANT**: This project uses `cargo-nextest` as the ONLY supported test runner. Standard `cargo test` is not supported.
+
+Install nextest if you don't have it:
+```bash
+cargo install cargo-nextest --locked
+```
 
 ### Building
 
@@ -82,8 +90,17 @@ make build
 
 ### Running Tests
 
+**⚠️ This project ONLY supports `cargo nextest` for running tests. Do NOT use `cargo test`.**
+
 ```bash
-make test
+make test                    # Runs cargo nextest run
+# OR
+cargo nextest run            # Run tests directly with nextest
+```
+
+If you don't have nextest installed:
+```bash
+cargo install cargo-nextest --locked
 ```
 
 ### Linting
