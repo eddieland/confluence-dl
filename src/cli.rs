@@ -169,7 +169,7 @@ pub enum ColorOption {
 #[derive(Debug, Parser)]
 pub struct PageOptions {
   /// Download child pages recursively
-  #[arg(long)]
+  #[arg(short = 'r', long, alias = "recursive")]
   pub children: bool,
 
   /// Maximum depth when downloading children
