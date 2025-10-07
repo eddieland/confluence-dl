@@ -21,6 +21,10 @@ anyhow = "1"
 scraper = "0.24.0"
 html2text = "0.15.5"
 
+[lib]
+name = "confluence_dl"
+path = "src/lib.rs"
+
 [[bin]]
 name = "confluence-dl"
 path = "src/main.rs"

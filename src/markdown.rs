@@ -44,9 +44,10 @@ fn convert_element_to_markdown(element: &scraper::ElementRef) -> String {
 
             // Paragraphs
             "p" => {
-              let text = get_element_text(&child_element).trim().to_string();
-              if !text.is_empty() {
-                result.push_str(&format!("{text}\n\n"));
+              let content = convert_element_to_markdown(&child_element);
+              let trimmed = content.trim();
+              if !trimmed.is_empty() {
+                result.push_str(&format!("{trimmed}\n\n"));
               }
             }
 
