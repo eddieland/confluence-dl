@@ -232,3 +232,69 @@ fn test_error_handling_workflow() {
   // Test existing page
   assert!(client.get_page("123456").is_ok());
 }
+
+use tempfile::TempDir;
+
+#[test]
+fn test_image_download_workflow() {
+  use confluence_dl::confluence::{Attachment, AttachmentLinks};
+  use confluence_dl::images;
+
+  // Create a temporary directory for the test
+  let temp_dir = TempDir::new().unwrap();
+  let output_path = temp_dir.path();
+
+  // Create a fake client with sample pages
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add some attachments for the page with images (must match filenames in the
+  // fixture)
+  let attachments = vec![Attachment {
+    id: "att1".to_string(),
+    title: "architecture.png".to_string(),
+    attachment_type: "attachment".to_string(),
+    media_type: Some("image/png".to_string()),
+    file_size: Some(1024),
+    links: Some(AttachmentLinks {
+      download: Some("/wiki/download/attachments/456789/architecture.png".to_string()),
+    }),
+  }];
+  client.add_attachments("456789", attachments);
+
+  // Get the page with images
+  let page = client.get_page("456789").unwrap();
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Extract image references
+  let image_refs = images::extract_image_references(storage_content).unwrap();
+  assert!(!image_refs.is_empty(), "Should find images in the page");
+
+  // Download images
+  let filename_map = images::download_images(&client, "456789", &image_refs, output_path, "images", false).unwrap();
+
+  // Verify images were "downloaded" (fake client creates empty files)
+  assert!(!filename_map.is_empty(), "Should have downloaded images");
+
+  // Verify files exist
+  for (original_filename, local_path) in &filename_map {
+    let full_path = output_path.join(local_path);
+    assert!(full_path.exists(), "Image file should exist: {:?}", full_path);
+    println!("Downloaded {} -> {}", original_filename, local_path.display());
+  }
+
+  // Test markdown link updating
+  let markdown = "![architecture](architecture.png)";
+  let updated_markdown = images::update_markdown_image_links(markdown, &filename_map);
+
+  // Verify links were updated to point to the images directory
+  assert!(
+    updated_markdown.contains("](images/"),
+    "Links should be updated to images directory: {}",
+    updated_markdown
+  );
+}

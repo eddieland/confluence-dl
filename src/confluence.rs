@@ -17,6 +17,12 @@ pub trait ConfluenceApi {
   /// Fetch a page by ID
   fn get_page(&self, page_id: &str) -> Result<Page>;
 
+  /// Get attachments for a page
+  fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>>;
+
+  /// Download an attachment by URL to a file
+  fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()>;
+
   /// Test authentication
   #[allow(dead_code)]
   fn test_auth(&self) -> Result<()>;
@@ -81,6 +87,33 @@ pub struct PageLinks {
   pub web_ui: Option<String>,
   #[serde(rename = "self")]
   pub self_link: Option<String>,
+}
+
+/// Attachment metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attachment {
+  pub id: String,
+  pub title: String,
+  #[serde(rename = "type")]
+  pub attachment_type: String,
+  #[serde(rename = "mediaType")]
+  pub media_type: Option<String>,
+  #[serde(rename = "fileSize")]
+  pub file_size: Option<u64>,
+  #[serde(rename = "_links")]
+  pub links: Option<AttachmentLinks>,
+}
+
+/// Attachment links
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachmentLinks {
+  pub download: Option<String>,
+}
+
+/// Attachments response wrapper
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachmentsResponse {
+  pub results: Vec<Attachment>,
 }
 
 /// Information extracted from a Confluence URL
@@ -164,6 +197,62 @@ impl ConfluenceApi for ConfluenceClient {
       .context("Failed to parse page response from Confluence API")?;
 
     Ok(page)
+  }
+
+  fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
+    let url = format!("{}/wiki/rest/api/content/{}/child/attachment", self.base_url, page_id);
+
+    let response = self
+      .client
+      .get(&url)
+      .header("Authorization", self.auth_header())
+      .header("Accept", "application/json")
+      .send()
+      .context("Failed to fetch attachments from Confluence API")?;
+
+    if !response.status().is_success() {
+      let status = response.status();
+      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
+    }
+
+    let attachments: AttachmentsResponse = response
+      .json()
+      .context("Failed to parse attachments response from Confluence API")?;
+
+    Ok(attachments.results)
+  }
+
+  fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()> {
+    // Build full URL if it's a relative path
+    let full_url = if url.starts_with("http://") || url.starts_with("https://") {
+      url.to_string()
+    } else {
+      format!("{}{}", self.base_url, url)
+    };
+
+    let response = self
+      .client
+      .get(&full_url)
+      .header("Authorization", self.auth_header())
+      .send()
+      .context("Failed to download attachment")?;
+
+    if !response.status().is_success() {
+      let status = response.status();
+      return Err(anyhow!("Failed to download attachment: {status}"));
+    }
+
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = output_path.parent() {
+      std::fs::create_dir_all(parent).context("Failed to create output directory for attachment")?;
+    }
+
+    // Write response bytes to file
+    let bytes = response.bytes().context("Failed to read attachment bytes")?;
+    std::fs::write(output_path, bytes).context("Failed to write attachment to file")?;
+
+    Ok(())
   }
 
   fn test_auth(&self) -> Result<()> {

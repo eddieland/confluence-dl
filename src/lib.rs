@@ -7,4 +7,5 @@ pub mod cli;
 pub mod color;
 pub mod confluence;
 pub mod credentials;
+pub mod images;
 pub mod markdown;

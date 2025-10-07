@@ -23,6 +23,7 @@ html2text = "0.15.5"
 
 [dev-dependencies]
 insta = "1.41"
+tempfile = "3.23.0"
 
 [lib]
 name = "confluence_dl"

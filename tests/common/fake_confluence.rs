@@ -4,15 +4,17 @@
 //! returns predefined responses without making any network requests.
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use anyhow::{Result, anyhow};
-use confluence_dl::confluence::{ConfluenceApi, Page};
+use confluence_dl::confluence::{Attachment, ConfluenceApi, Page};
 
 use crate::common::fixtures;
 
 /// A fake Confluence client that returns predefined responses for testing
 pub struct FakeConfluenceClient {
   pages: HashMap<String, Page>,
+  attachments: HashMap<String, Vec<Attachment>>,
   auth_should_succeed: bool,
 }
 
@@ -21,6 +23,7 @@ impl FakeConfluenceClient {
   pub fn new() -> Self {
     Self {
       pages: HashMap::new(),
+      attachments: HashMap::new(),
       auth_should_succeed: true,
     }
   }
@@ -56,6 +59,12 @@ impl FakeConfluenceClient {
   pub fn set_auth_success(&mut self, should_succeed: bool) {
     self.auth_should_succeed = should_succeed;
   }
+
+  /// Add attachments for a page
+  #[allow(dead_code)]
+  pub fn add_attachments(&mut self, page_id: &str, attachments: Vec<Attachment>) {
+    self.attachments.insert(page_id.to_string(), attachments);
+  }
 }
 
 impl Default for FakeConfluenceClient {
@@ -71,6 +80,19 @@ impl ConfluenceApi for FakeConfluenceClient {
       .get(page_id)
       .cloned()
       .ok_or_else(|| anyhow!("No content found with id: {}", page_id))
+  }
+
+  fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
+    Ok(self.attachments.get(page_id).cloned().unwrap_or_default())
+  }
+
+  fn download_attachment(&self, _url: &str, output_path: &Path) -> Result<()> {
+    // For testing, just create an empty file
+    if let Some(parent) = output_path.parent() {
+      std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(output_path, b"fake image data")?;
+    Ok(())
   }
 
   fn test_auth(&self) -> Result<()> {

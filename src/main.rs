@@ -6,6 +6,7 @@ mod cli;
 mod color;
 mod confluence;
 mod credentials;
+mod images;
 mod markdown;
 
 use std::path::Path;
@@ -393,7 +394,7 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
 
   // Convert to Markdown
   println!("\n{} {}", colors.info("→"), colors.info("Converting to Markdown"));
-  let markdown = markdown::storage_to_markdown(storage_content)?;
+  let mut markdown = markdown::storage_to_markdown(storage_content)?;
 
   if cli.behavior.verbose > 0 {
     println!(
@@ -401,6 +402,46 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
       colors.dimmed("Markdown size"),
       colors.number(markdown.len())
     );
+  }
+
+  // Download images if requested
+  if cli.images_links.download_images {
+    println!("\n{} {}", colors.info("→"), colors.info("Processing images"));
+
+    // Extract image references from storage content
+    let image_refs = images::extract_image_references(storage_content)?;
+
+    if !image_refs.is_empty() {
+      println!(
+        "  {}: {} {}",
+        colors.emphasis("Found"),
+        colors.number(image_refs.len()),
+        if image_refs.len() == 1 { "image" } else { "images" }
+      );
+
+      // Download images
+      let output_dir = Path::new(&cli.output.output);
+      let filename_map = images::download_images(
+        &client,
+        &url_info.page_id,
+        &image_refs,
+        output_dir,
+        &cli.images_links.images_dir,
+        cli.output.overwrite,
+      )?;
+
+      println!(
+        "  {} Downloaded {} {}",
+        colors.success("✓"),
+        colors.number(filename_map.len()),
+        if filename_map.len() == 1 { "image" } else { "images" }
+      );
+
+      // Update markdown links to reference local files
+      markdown = images::update_markdown_image_links(&markdown, &filename_map);
+    } else {
+      println!("  {}", colors.dimmed("No images found in page"));
+    }
   }
 
   // Create output directory
@@ -419,7 +460,7 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
   }
 
   // Write to file
-  println!("{} {}", colors.info("→"), colors.info("Writing to disk"));
+  println!("\n{} {}", colors.info("→"), colors.info("Writing to disk"));
   println!("  {}: {}", colors.emphasis("File"), colors.path(output_path.display()));
 
   fs::write(&output_path, markdown)?;
