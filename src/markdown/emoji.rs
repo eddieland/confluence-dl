@@ -4,6 +4,7 @@
 //! emoji.
 
 use roxmltree::Node;
+use tracing::{debug, trace};
 
 use super::utils::{get_attribute, get_element_text};
 
@@ -24,35 +25,35 @@ pub fn convert_emoji_to_markdown(element: Node, verbose: u8) -> String {
     && let Some(emoji) = emoji_id_to_unicode(id, verbose)
   {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji conversion: id={id} -> {emoji}");
+      debug!("Emoji conversion: id={id} -> {emoji}");
     }
     return emoji;
   }
 
   if let Some(fb) = fallback.as_deref() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji fallback: {fb}");
+      debug!("Emoji fallback: {fb}");
     }
     return fb.to_string();
   }
 
   if let Some(sc) = shortcut.as_deref() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji shortcut: {sc}");
+      debug!("Emoji shortcut: {sc}");
     }
     return sc.to_string();
   }
 
   if let Some(sn) = shortname.as_deref() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji shortname: {sn}");
+      debug!("Emoji shortname: {sn}");
     }
     return sn.to_string();
   }
 
   let text = get_element_text(element);
   if verbose >= 3 && text.trim().is_empty() {
-    eprintln!("[DEBUG] Emoji element with no resolvable content");
+    trace!("Emoji element with no resolvable content");
   }
   if !text.trim().is_empty() { text } else { String::new() }
 }
@@ -73,14 +74,14 @@ pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
   }
 
   if verbose >= 2 {
-    eprintln!("[DEBUG] Span emoji: id={emoji_id:?}, shortname={emoji_shortname:?}, fallback={emoji_fallback:?}");
+    debug!("Span emoji: id={emoji_id:?}, shortname={emoji_shortname:?}, fallback={emoji_fallback:?}");
   }
 
   if let Some(id) = emoji_id.as_deref()
     && let Some(emoji) = emoji_id_to_unicode(id, verbose)
   {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Span emoji resolved: {id} -> {emoji}");
+      debug!("Span emoji resolved: {id} -> {emoji}");
     }
     return Some(emoji);
   }
@@ -88,20 +89,20 @@ pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
   let text = get_element_text(element);
   if !text.trim().is_empty() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Span emoji from text: {text}");
+      debug!("Span emoji from text: {text}");
     }
     return Some(text);
   }
 
   if let Some(shortname) = emoji_shortname.or(emoji_fallback).as_deref() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Span emoji from shortname/fallback: {shortname}");
+      debug!("Span emoji from shortname/fallback: {shortname}");
     }
     return Some(shortname.to_string());
   }
 
   if verbose >= 3 {
-    eprintln!("[DEBUG] Span emoji with no resolvable content");
+    trace!("Span emoji with no resolvable content");
   }
 
   None
@@ -115,7 +116,7 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
   let trimmed = id.trim().trim_start_matches("emoji-").trim_start_matches("emoji/");
   if trimmed.is_empty() {
     if verbose >= 3 {
-      eprintln!("[DEBUG] Empty emoji ID after trimming: {id}");
+      trace!("Empty emoji ID after trimming: {id}");
     }
     return None;
   }
@@ -133,7 +134,7 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
       Ok(c) => c,
       Err(e) => {
         if verbose >= 2 {
-          eprintln!("[DEBUG] Failed to parse emoji hex '{part}': {e}");
+          debug!("Failed to parse emoji hex '{part}': {e}");
         }
         return None;
       }
@@ -143,7 +144,7 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
       Some(c) => c,
       None => {
         if verbose >= 2 {
-          eprintln!("[DEBUG] Invalid unicode codepoint: U+{code:X}");
+          debug!("Invalid unicode codepoint: U+{code:X}");
         }
         return None;
       }
@@ -154,12 +155,12 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
 
   if result.is_empty() {
     if verbose >= 3 {
-      eprintln!("[DEBUG] No valid emoji characters from ID: {id}");
+      trace!("No valid emoji characters from ID: {id}");
     }
     None
   } else {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji ID {id} -> {result}");
+      debug!("Emoji ID {id} -> {result}");
     }
     Some(result)
   }

@@ -18,9 +18,13 @@ use commands::auth::handle_auth_command;
 use commands::completions::handle_completions_command;
 use commands::page::handle_page_download;
 use commands::version::handle_version_command;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::LevelFilter;
 
 fn main() {
   let cli = Cli::parse_args();
+
+  init_tracing(&cli.behavior);
 
   // Create color scheme based on user preference
   let colors = ColorScheme::new(cli.behavior.color);
@@ -51,4 +55,26 @@ fn main() {
   if let Some(ref page_input) = cli.page_input {
     handle_page_download(page_input, &cli, &colors);
   }
+}
+
+fn init_tracing(behavior: &cli::BehaviorOptions) {
+  let level = if behavior.quiet {
+    LevelFilter::ERROR
+  } else {
+    match behavior.verbose {
+      0 => LevelFilter::INFO,
+      1 => LevelFilter::DEBUG,
+      _ => LevelFilter::TRACE,
+    }
+  };
+
+  let env_filter = EnvFilter::builder()
+    .with_default_directive(level.into())
+    .from_env_lossy();
+
+  let _ = tracing_subscriber::fmt()
+    .with_env_filter(env_filter)
+    .with_target(false)
+    .with_writer(std::io::stderr)
+    .try_init();
 }

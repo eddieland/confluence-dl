@@ -26,6 +26,7 @@
 
 use anyhow::Result;
 use roxmltree::Document;
+use tracing::{error, trace};
 
 // Module declarations
 mod elements;
@@ -70,19 +71,19 @@ pub fn storage_to_markdown(storage_content: &str, verbose: u8) -> Result<String>
   let wrapped = utils::wrap_with_namespaces(&preprocessed);
 
   if verbose >= 4 {
-    eprintln!(
-      "[DEBUG] Wrapped XML (first 500 chars):\n{}",
-      &wrapped.chars().take(500).collect::<String>()
+    trace!(
+      "Wrapped XML (first 500 chars):\n{}",
+      wrapped.chars().take(500).collect::<String>()
     );
   }
 
   // Parse the HTML/XML content
   let document = Document::parse(&wrapped).map_err(|e| {
     if verbose >= 1 {
-      eprintln!("[ERROR] XML parse error: {e}");
-      eprintln!("[ERROR] Wrapped XML length: {} chars", wrapped.len());
+      error!("XML parse error: {e}");
+      error!("Wrapped XML length: {} chars", wrapped.len());
       if verbose >= 3 {
-        eprintln!("[ERROR] Full wrapped XML:\n{wrapped}");
+        trace!("Full wrapped XML:\n{wrapped}");
       }
     }
     anyhow::anyhow!("Failed to parse Confluence storage content: {e}")
