@@ -126,7 +126,16 @@ fn convert_element_to_markdown(element: &scraper::ElementRef) -> String {
 
             // Span elements - just extract content
             "span" => {
-              result.push_str(&convert_element_to_markdown(&child_element));
+              if let Some(emoji) = convert_span_emoji(&child_element) {
+                result.push_str(&emoji);
+              } else {
+                result.push_str(&convert_element_to_markdown(&child_element));
+              }
+            }
+
+            // Emojis
+            "ac:emoji" | "ac:emoticon" => {
+              result.push_str(&convert_emoji_to_markdown(&child_element));
             }
 
             // Default: recurse into children
@@ -204,6 +213,17 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
         body.trim()
       )
     }
+    "emoji" => find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji-id")
+      .map(|e| e.text().collect::<String>())
+      .and_then(|id| emoji_id_to_unicode(id.trim()))
+      .or_else(|| {
+        find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji").map(|e| e.text().collect::<String>())
+      })
+      .or_else(|| {
+        find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "shortname")
+          .map(|e| e.text().collect::<String>())
+      })
+      .unwrap_or_default(),
     "anchor" => String::new(), // Skip anchors
     _ => {
       // For unknown macros, just extract the text content
@@ -286,6 +306,87 @@ fn convert_image_to_markdown(element: &scraper::ElementRef) -> String {
   }
 }
 
+/// Convert an emoji element to markdown by resolving its codepoint
+fn convert_emoji_to_markdown(element: &scraper::ElementRef) -> String {
+  if let Some(id) = element.value().attr("ac:emoji-id")
+    && let Some(emoji) = emoji_id_to_unicode(id)
+  {
+    return emoji;
+  }
+
+  if let Some(shortcut) = element.value().attr("ac:shortcut") {
+    return shortcut.to_string();
+  }
+
+  if let Some(shortname) = element
+    .value()
+    .attr("ac:shortname")
+    .or_else(|| element.value().attr("ac:emoji-shortname"))
+  {
+    return shortname.to_string();
+  }
+
+  let text = get_element_text(element);
+  if !text.trim().is_empty() { text } else { String::new() }
+}
+
+/// Try to resolve emoji metadata stored on span elements
+fn convert_span_emoji(element: &scraper::ElementRef) -> Option<String> {
+  let value = element.value();
+
+  let has_metadata = value.attr("data-emoji-id").is_some()
+    || value.attr("data-emoji-shortname").is_some()
+    || value.attr("data-emoji-fallback").is_some();
+
+  if !has_metadata {
+    return None;
+  }
+
+  if let Some(id) = value.attr("data-emoji-id")
+    && let Some(emoji) = emoji_id_to_unicode(id)
+  {
+    return Some(emoji);
+  }
+
+  let text = get_element_text(element);
+  if !text.trim().is_empty() {
+    return Some(text);
+  }
+
+  if let Some(shortname) = value
+    .attr("data-emoji-shortname")
+    .or_else(|| value.attr("data-emoji-fallback"))
+  {
+    return Some(shortname.to_string());
+  }
+
+  None
+}
+
+/// Convert an emoji identifier like "1f44b" or "1f469-200d-1f4bb" into unicode
+fn emoji_id_to_unicode(id: &str) -> Option<String> {
+  let trimmed = id.trim().trim_start_matches("emoji-").trim_start_matches("emoji/");
+  if trimmed.is_empty() {
+    return None;
+  }
+
+  let mut result = String::new();
+  let normalized = trimmed.replace('_', "-");
+
+  for part in normalized.split('-') {
+    let part = part.trim();
+    if part.is_empty() {
+      continue;
+    }
+
+    let code = u32::from_str_radix(part, 16).ok()?;
+    let ch = char::from_u32(code)?;
+    result.push(ch);
+  }
+
+  if result.is_empty() { None } else { Some(result) }
+}
+
 /// Convert HTML table to markdown table
 fn convert_table_to_markdown(element: &scraper::ElementRef) -> String {
   let mut rows: Vec<Vec<String>> = Vec::new();
@@ -339,7 +440,7 @@ fn convert_table_to_markdown(element: &scraper::ElementRef) -> String {
 
 /// Decode common HTML entities
 fn decode_html_entities(text: &str) -> String {
-  text
+  let replaced = text
     .replace("&nbsp;", " ")
     .replace("&rsquo;", "'")
     .replace("&lsquo;", "'")
@@ -353,7 +454,61 @@ fn decode_html_entities(text: &str) -> String {
     .replace("&quot;", "\"")
     .replace("&rarr;", "→")
     .replace("&larr;", "←")
-    .replace("&#39;", "'")
+    .replace("&#39;", "'");
+
+  decode_numeric_html_entities(&replaced)
+}
+
+/// Decode numeric HTML entities so emoji references render properly
+fn decode_numeric_html_entities(text: &str) -> String {
+  let mut result = String::with_capacity(text.len());
+  let mut index = 0;
+  let bytes = text.as_bytes();
+
+  while index < text.len() {
+    if bytes[index] == b'&'
+      && let Some(semi_offset) = text[index..].find(';')
+    {
+      let end = index + semi_offset;
+      if let Some(decoded) = decode_numeric_entity(&text[index + 1..end]) {
+        result.push_str(&decoded);
+        index = end + 1;
+        continue;
+      }
+    }
+
+    let ch = text[index..].chars().next().unwrap();
+    result.push(ch);
+    index += ch.len_utf8();
+  }
+
+  result
+}
+
+fn decode_numeric_entity(entity: &str) -> Option<String> {
+  let body = entity.strip_prefix('#')?;
+
+  let (radix, digits) = if let Some(hex) = body.strip_prefix('x').or_else(|| body.strip_prefix('X')) {
+    (16, hex)
+  } else {
+    (10, body)
+  };
+
+  if digits.is_empty()
+    || !digits.chars().all(|c| {
+      if radix == 16 {
+        c.is_ascii_hexdigit()
+      } else {
+        c.is_ascii_digit()
+      }
+    })
+  {
+    return None;
+  }
+
+  let value = u32::from_str_radix(digits, radix).ok()?;
+  let ch = char::from_u32(value)?;
+  Some(ch.to_string())
 }
 
 /// Clean up the markdown output
@@ -382,9 +537,9 @@ mod tests {
 
   #[test]
   fn test_decode_html_entities() {
-    let input = "There&rsquo;s a lot&mdash;this &amp; that";
+    let input = "There&rsquo;s a lot&mdash;this &amp; that &#x1F642; &#128075;";
     let output = decode_html_entities(input);
-    assert_eq!(output, "There's a lot—this & that");
+    assert_eq!(output, "There's a lot—this & that 🙂 👋");
   }
 
   #[test]
@@ -669,6 +824,38 @@ mod tests {
     let input = r#"<ac:image><ri:url ri:value="https://example.com/img.png" /></ac:image>"#;
     let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("![image](https://example.com/img.png)"));
+  }
+
+  #[test]
+  fn test_convert_confluence_emoji_from_id() {
+    let input = r#"<p>Hello <ac:emoji ac:emoji-id="1f44b" /></p>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("Hello 👋"));
+  }
+
+  #[test]
+  fn test_convert_confluence_emoji_multi_codepoint() {
+    let input = r#"<p><ac:emoji ac:emoji-id="1f469-200d-1f4bb" /></p>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("👩‍💻"));
+  }
+
+  #[test]
+  fn test_convert_confluence_emoji_shortcut_fallback() {
+    let input = r#"<p><ac:emoji ac:shortcut=":)" /></p>"#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains(":)"));
+  }
+
+  #[test]
+  fn test_convert_emoji_macro() {
+    let input = r#"
+      <ac:structured-macro ac:name="emoji">
+        <ac:parameter ac:name="emoji-id">1f60a</ac:parameter>
+      </ac:structured-macro>
+    "#;
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("😊"));
   }
 
   #[test]
