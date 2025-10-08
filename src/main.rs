@@ -21,7 +21,8 @@ use commands::version::handle_version_command;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
 
-fn main() {
+#[tokio::main]
+async fn main() {
   let cli = Cli::parse_args();
 
   init_tracing(&cli.behavior);
@@ -39,7 +40,7 @@ fn main() {
   if let Some(ref command) = cli.command {
     match command {
       Command::Auth { subcommand } => {
-        handle_auth_command(subcommand, &cli, &colors);
+        handle_auth_command(subcommand, &cli, &colors).await;
       }
       Command::Version { json, short } => {
         handle_version_command(*json, *short, &colors);
@@ -53,7 +54,7 @@ fn main() {
 
   // Handle main page download functionality
   if let Some(ref page_input) = cli.page_input {
-    handle_page_download(page_input, &cli, &colors);
+    handle_page_download(page_input, &cli, &colors).await;
   }
 }
 

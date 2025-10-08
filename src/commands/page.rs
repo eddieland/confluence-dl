@@ -10,7 +10,7 @@ use crate::confluence::{self, ConfluenceApi};
 use crate::{images, markdown};
 
 /// Handle page download
-pub(crate) fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
+pub(crate) async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
   println!("{} {}", colors.progress("→"), colors.info("Downloading page"));
   println!("  {}: {}", colors.emphasis("URL"), colors.link(page_input));
   println!("  {}: {}", colors.emphasis("Output"), colors.path(&cli.output.output));
@@ -40,7 +40,7 @@ pub(crate) fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorSc
   }
 
   // Parse the input to extract page ID and base URL
-  if let Err(e) = download_page(page_input, cli, colors) {
+  if let Err(e) = download_page(page_input, cli, colors).await {
     eprintln!("{} {}", colors.error("✗"), colors.error("Failed to download page"));
     eprintln!("  {}: {}", colors.emphasis("Error"), e);
     process::exit(1);
@@ -50,7 +50,7 @@ pub(crate) fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorSc
 }
 
 /// Download a page and save it to disk
-fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::Result<()> {
+async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::Result<()> {
   // Parse URL to extract page ID and base URL
   let url_info = if page_input.contains("://") {
     // It's a URL
@@ -91,7 +91,7 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
       println!("  {}: {}", colors.emphasis("Max depth"), colors.number(depth));
     }
 
-    let tree = confluence::get_page_tree(&client, &url_info.page_id, max_depth)?;
+    let tree = confluence::get_page_tree(&client, &url_info.page_id, max_depth).await?;
 
     let total_pages = count_pages_in_tree(&tree);
     println!(
@@ -104,14 +104,14 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
     // Download the entire tree
     println!("\n{} {}", colors.info("→"), colors.info("Downloading pages"));
     let output_dir = Path::new(&cli.output.output);
-    download_page_tree(&client, &tree, output_dir, cli, colors)?;
+    download_page_tree(&client, &tree, output_dir, cli, colors).await?;
 
     return Ok(());
   }
 
   // Fetch single page (non-children mode)
   println!("{} {}", colors.info("→"), colors.info("Fetching page content"));
-  let page = client.get_page(&url_info.page_id)?;
+  let page = client.get_page(&url_info.page_id).await?;
 
   println!("  {}: {}", colors.emphasis("Title"), colors.emphasis(&page.title));
   println!("  {}: {}", colors.emphasis("Type"), &page.page_type);
@@ -169,7 +169,8 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
         output_dir,
         &cli.images_links.images_dir,
         cli.output.overwrite,
-      )?;
+      )
+      .await?;
 
       println!(
         "  {} Downloaded {} {}",
@@ -216,121 +217,124 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
 }
 
 /// Download a page tree recursively
-fn download_page_tree(
-  client: &dyn ConfluenceApi,
-  tree: &confluence::PageTree,
-  output_dir: &Path,
-  cli: &Cli,
-  colors: &ColorScheme,
-) -> anyhow::Result<()> {
-  // Download the current page
-  let page = &tree.page;
-
-  if cli.behavior.verbose > 0 {
-    println!(
-      "{}   {} {}",
-      colors.progress("→"),
-      colors.dimmed(format!("Depth {}", tree.depth)),
-      colors.info(&page.title)
-    );
-  }
-
-  // Get the storage content
-  let storage_content = page
-    .body
-    .as_ref()
-    .and_then(|b| b.storage.as_ref())
-    .map(|s| s.value.as_str())
-    .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
-
-  // Generate filename from page title (needed for raw XML saving)
-  let filename = sanitize_filename(&page.title);
-
-  // Save raw Confluence storage format BEFORE parsing if requested
-  // This ensures we can debug parse failures
-  if cli.output.save_raw {
-    let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
-    if let Some(parent) = raw_output_path.parent() {
-      fs::create_dir_all(parent)
-        .with_context(|| format!("Failed to create directory for raw storage at {}", parent.display()))?;
-    }
-    fs::write(&raw_output_path, storage_content)
-      .with_context(|| format!("Failed to write raw storage to {}", raw_output_path.display()))?;
+fn download_page_tree<'a>(
+  client: &'a dyn ConfluenceApi,
+  tree: &'a confluence::PageTree,
+  output_dir: &'a Path,
+  cli: &'a Cli,
+  colors: &'a ColorScheme,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + 'a + Send>> {
+  Box::pin(async move {
+    // Download the current page
+    let page = &tree.page;
 
     if cli.behavior.verbose > 0 {
       println!(
-        "    {} {}",
-        colors.dimmed("→"),
-        colors.dimmed(format!("Raw: {}", raw_output_path.display()))
+        "{}   {} {}",
+        colors.progress("→"),
+        colors.dimmed(format!("Depth {}", tree.depth)),
+        colors.info(&page.title)
       );
     }
-  }
 
-  // Convert to Markdown
-  let mut markdown = markdown::storage_to_markdown(storage_content)
-    .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
+    // Get the storage content
+    let storage_content = page
+      .body
+      .as_ref()
+      .and_then(|b| b.storage.as_ref())
+      .map(|s| s.value.as_str())
+      .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
 
-  // Download images if requested
-  if cli.images_links.download_images {
-    let image_refs = images::extract_image_references(storage_content)?;
+    // Generate filename from page title (needed for raw XML saving)
+    let filename = sanitize_filename(&page.title);
 
-    if !image_refs.is_empty() {
-      let filename_map = images::download_images(
-        client,
-        &page.id,
-        &image_refs,
-        output_dir,
-        &cli.images_links.images_dir,
-        cli.output.overwrite,
-      )?;
+    // Save raw Confluence storage format BEFORE parsing if requested
+    // This ensures we can debug parse failures
+    if cli.output.save_raw {
+      let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
+      if let Some(parent) = raw_output_path.parent() {
+        fs::create_dir_all(parent)
+          .with_context(|| format!("Failed to create directory for raw storage at {}", parent.display()))?;
+      }
+      fs::write(&raw_output_path, storage_content)
+        .with_context(|| format!("Failed to write raw storage to {}", raw_output_path.display()))?;
 
-      markdown = images::update_markdown_image_links(&markdown, &filename_map);
-    }
-  }
-
-  // Generate output path
-  let output_path = output_dir.join(format!("{filename}.md"));
-
-  // Check if file exists and handle overwrite
-  if output_path.exists() && !cli.output.overwrite {
-    let message = format!(
-      "File already exists: {}. Use --overwrite to replace it.",
-      output_path.display()
-    );
-
-    eprintln!("{} {}", colors.error("✗"), colors.error(&message));
-
-    anyhow::bail!(message);
-  } else {
-    // Create parent directory
-    if let Some(parent) = output_path.parent() {
-      fs::create_dir_all(parent).with_context(|| format!("Failed to create directory {}", parent.display()))?;
+      if cli.behavior.verbose > 0 {
+        println!(
+          "    {} {}",
+          colors.dimmed("→"),
+          colors.dimmed(format!("Raw: {}", raw_output_path.display()))
+        );
+      }
     }
 
-    // Write markdown to file
-    fs::write(&output_path, markdown)
-      .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
+    // Convert to Markdown
+    let mut markdown = markdown::storage_to_markdown(storage_content)
+      .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
 
-    if !cli.behavior.quiet {
-      println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
+    // Download images if requested
+    if cli.images_links.download_images {
+      let image_refs = images::extract_image_references(storage_content)?;
+
+      if !image_refs.is_empty() {
+        let filename_map = images::download_images(
+          client,
+          &page.id,
+          &image_refs,
+          output_dir,
+          &cli.images_links.images_dir,
+          cli.output.overwrite,
+        )
+        .await?;
+
+        markdown = images::update_markdown_image_links(&markdown, &filename_map);
+      }
     }
 
-    // Raw XML was already saved before parsing (if requested)
-  }
+    // Generate output path
+    let output_path = output_dir.join(format!("{filename}.md"));
 
-  // Download child pages recursively
-  if !tree.children.is_empty() {
-    // Create subdirectory for children
-    let child_dir = output_dir.join(&filename);
-    fs::create_dir_all(&child_dir)
-      .with_context(|| format!("Failed to create directory for child pages at {}", child_dir.display()))?;
+    // Check if file exists and handle overwrite
+    if output_path.exists() && !cli.output.overwrite {
+      let message = format!(
+        "File already exists: {}. Use --overwrite to replace it.",
+        output_path.display()
+      );
 
-    for child_tree in &tree.children {
-      download_page_tree(client, child_tree, &child_dir, cli, colors)?;
+      eprintln!("{} {}", colors.error("✗"), colors.error(&message));
+
+      anyhow::bail!(message);
+    } else {
+      // Create parent directory
+      if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("Failed to create directory {}", parent.display()))?;
+      }
+
+      // Write markdown to file
+      fs::write(&output_path, markdown)
+        .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
+
+      if !cli.behavior.quiet {
+        println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
+      }
+
+      // Raw XML was already saved before parsing (if requested)
     }
-  }
 
-  Ok(())
+    // Download child pages recursively
+    if !tree.children.is_empty() {
+      // Create subdirectory for children
+      let child_dir = output_dir.join(&filename);
+      fs::create_dir_all(&child_dir)
+        .with_context(|| format!("Failed to create directory for child pages at {}", child_dir.display()))?;
+
+      for child_tree in &tree.children {
+        download_page_tree(client, child_tree, &child_dir, cli, colors).await?;
+      }
+    }
+
+    Ok(())
+  })
 }
 
 /// Count total pages in a page tree (including root and all descendants)

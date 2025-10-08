@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
+use async_trait::async_trait;
 use confluence_dl::confluence::{Attachment, ConfluenceApi, Page, UserInfo};
 
 use crate::common::fixtures;
@@ -81,8 +82,9 @@ impl Default for FakeConfluenceClient {
   }
 }
 
+#[async_trait]
 impl ConfluenceApi for FakeConfluenceClient {
-  fn get_page(&self, page_id: &str) -> Result<Page> {
+  async fn get_page(&self, page_id: &str) -> Result<Page> {
     self
       .pages
       .get(page_id)
@@ -90,7 +92,7 @@ impl ConfluenceApi for FakeConfluenceClient {
       .ok_or_else(|| anyhow!("No content found with id: {}", page_id))
   }
 
-  fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>> {
+  async fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>> {
     let child_ids = self.child_pages.get(page_id).cloned().unwrap_or_default();
     let mut children = Vec::new();
 
@@ -103,20 +105,20 @@ impl ConfluenceApi for FakeConfluenceClient {
     Ok(children)
   }
 
-  fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
+  async fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
     Ok(self.attachments.get(page_id).cloned().unwrap_or_default())
   }
 
-  fn download_attachment(&self, _url: &str, output_path: &Path) -> Result<()> {
+  async fn download_attachment(&self, _url: &str, output_path: &Path) -> Result<()> {
     // For testing, just create an empty file
     if let Some(parent) = output_path.parent() {
-      std::fs::create_dir_all(parent)?;
+      tokio::fs::create_dir_all(parent).await?;
     }
-    std::fs::write(output_path, b"fake image data")?;
+    tokio::fs::write(output_path, b"fake image data").await?;
     Ok(())
   }
 
-  fn test_auth(&self) -> Result<UserInfo> {
+  async fn test_auth(&self) -> Result<UserInfo> {
     if self.auth_should_succeed {
       Ok(UserInfo {
         account_id: "test-account-id".to_string(),
@@ -134,53 +136,53 @@ impl ConfluenceApi for FakeConfluenceClient {
 mod tests {
   use super::*;
 
-  #[test]
-  fn test_fake_client_empty() {
+  #[tokio::test]
+  async fn test_fake_client_empty() {
     let client = FakeConfluenceClient::new();
-    assert!(client.get_page("123456").is_err());
+    assert!(client.get_page("123456").await.is_err());
   }
 
-  #[test]
-  fn test_fake_client_with_samples() {
+  #[tokio::test]
+  async fn test_fake_client_with_samples() {
     let client = FakeConfluenceClient::with_sample_pages();
 
     // Should be able to fetch sample pages
-    let page = client.get_page("123456").unwrap();
+    let page = client.get_page("123456").await.unwrap();
     assert_eq!(page.id, "123456");
     assert_eq!(page.title, "Getting Started Guide");
 
     // Non-existent page should error
-    assert!(client.get_page("999999").is_err());
+    assert!(client.get_page("999999").await.is_err());
   }
 
-  #[test]
-  fn test_fake_client_add_page() {
+  #[tokio::test]
+  async fn test_fake_client_add_page() {
     let mut client = FakeConfluenceClient::new();
 
     client.add_page_from_json("test123", fixtures::sample_page_response());
 
-    let page = client.get_page("test123").unwrap();
+    let page = client.get_page("test123").await.unwrap();
     assert_eq!(page.title, "Getting Started Guide");
   }
 
-  #[test]
-  fn test_fake_client_auth_success() {
+  #[tokio::test]
+  async fn test_fake_client_auth_success() {
     let client = FakeConfluenceClient::new();
-    assert!(client.test_auth().is_ok());
+    assert!(client.test_auth().await.is_ok());
   }
 
-  #[test]
-  fn test_fake_client_auth_failure() {
+  #[tokio::test]
+  async fn test_fake_client_auth_failure() {
     let mut client = FakeConfluenceClient::new();
     client.set_auth_success(false);
-    assert!(client.test_auth().is_err());
+    assert!(client.test_auth().await.is_err());
   }
 
-  #[test]
-  fn test_fake_client_complex_page() {
+  #[tokio::test]
+  async fn test_fake_client_complex_page() {
     let client = FakeConfluenceClient::with_sample_pages();
 
-    let page = client.get_page("789012").unwrap();
+    let page = client.get_page("789012").await.unwrap();
     assert_eq!(page.title, "API Documentation");
     assert!(page.body.is_some());
 
@@ -192,11 +194,11 @@ mod tests {
     assert!(storage.value.contains("code"));
   }
 
-  #[test]
-  fn test_fake_client_page_with_space() {
+  #[tokio::test]
+  async fn test_fake_client_page_with_space() {
     let client = FakeConfluenceClient::with_sample_pages();
 
-    let page = client.get_page("123456").unwrap();
+    let page = client.get_page("123456").await.unwrap();
     assert!(page.space.is_some());
 
     let space = page.space.unwrap();

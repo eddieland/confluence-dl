@@ -260,7 +260,7 @@ fn preprocess_html_entities(text: &str) -> String {
 ///
 /// # Returns
 /// A map from original attachment filenames to relative filesystem paths.
-pub fn download_images(
+pub async fn download_images(
   client: &dyn ConfluenceApi,
   page_id: &str,
   image_refs: &[ImageReference],
@@ -277,11 +277,14 @@ pub fn download_images(
   // Get all attachments for the page
   let attachments = client
     .get_attachments(page_id)
+    .await
     .context("Failed to fetch page attachments")?;
 
   // Create images directory
   let images_dir = output_dir.join(images_subdir);
-  std::fs::create_dir_all(&images_dir).context("Failed to create images directory")?;
+  tokio::fs::create_dir_all(&images_dir)
+    .await
+    .context("Failed to create images directory")?;
 
   // Download each image
   for image_ref in image_refs {
@@ -313,6 +316,7 @@ pub fn download_images(
     // Download the image
     client
       .download_attachment(download_url, &output_path)
+      .await
       .with_context(|| format!("Failed to download image: {}", image_ref.filename))?;
 
     // Store the relative path (relative to output_dir)
