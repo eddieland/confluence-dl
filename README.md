@@ -255,47 +255,24 @@ confluence-dl --help
 
 ## Development
 
-### Prerequisites
+Want to contribute or build from source? See [`CONTRIBUTING.md`](CONTRIBUTING.md:1) for:
 
-- Rust 1.90 or later
-- **cargo-nextest** (required for running tests)
+- **Environment setup**: Rust installation, required tools (cargo-nextest, cargo-llvm-cov)
+- **Development workflow**: Build commands, testing, code quality checks
+- **Contribution guidelines**: Code style, pull request process
 
-**⚠️ IMPORTANT**: This project uses `cargo-nextest` as the ONLY supported test runner. Standard `cargo test` is not supported.
-
-Install nextest:
-
-```bash
-cargo install cargo-nextest --locked
-```
-
-### Quick Commands
+### Quick Reference
 
 ```bash
+make all                # Format, lint, and test (run this before committing)
 make build              # Build debug version
 make test               # Run tests with nextest
-make fmt                # Format code
-make lint               # Run clippy
-make all                # Format, lint, and test
 make release            # Build optimized binary
 ```
 
-### Running Tests
+**⚠️ This project uses `cargo-nextest` exclusively** - standard `cargo test` is not supported. See [`CONTRIBUTING.md`](CONTRIBUTING.md:1) for installation instructions.
 
-**⚠️ This project ONLY supports `cargo nextest` - do NOT use `cargo test`.**
-
-```bash
-make test
-# OR
-cargo nextest run
-```
-
-### Code Quality
-
-- Formatting: [`rustfmt`](.rustfmt.toml:1) with nightly features
-- Linting: [`clippy`](.clippy.toml:1) configured to deny warnings
-- Testing: Comprehensive E2E tests using stub-based approach
-
-See [`AGENTS.md`](AGENTS.md:1) for detailed development guidelines.
+For detailed development guidelines and architecture notes, see [`AGENTS.md`](AGENTS.md:1).
 
 ## License
 
