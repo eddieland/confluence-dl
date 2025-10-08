@@ -1,24 +1,24 @@
 [package]
 name = "confluence-dl"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Edward Jones <e@eddie.land>"]
 description = "CLI for exporting Confluence spaces and pages to Markdown"
 repository = "https://github.com/eddieland/confluence-dl"
 
 [dependencies]
+anyhow = "1"
+base64 = "0.22"
+chrono = "0.4"
 clap = { version = "4.5.48", features = ["derive", "env", "color"] }
 clap_complete = "4.5.58"
-chrono = "0.4"
 owo-colors = { version = "4.1", features = ["supports-colors"] }
 reqwest = { version = "0.12", features = ["json", "blocking"] }
-tokio = { version = "1", features = ["full"] }
+roxmltree = "0.21"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tokio = { version = "1", features = ["full"] }
 url = "2"
-base64 = "0.22"
-anyhow = "1"
-roxmltree = "0.20"
 
 [dev-dependencies]
 insta = "1.41"

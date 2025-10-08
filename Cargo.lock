@@ -219,7 +219,7 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
 name = "confluence-dl"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -1116,9 +1116,12 @@ dependencies = [
 
 [[package]]
 name = "roxmltree"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
+checksum = "963e3e7a0795e975f0a57b8a3caf100a2d4ced3758a5d18e6bd6b9aea854f53f"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "rustc-demangle"
