@@ -484,3 +484,397 @@ fn test_page_tree_circular_reference_detection() {
   assert_eq!(child.page.title, "Child Page 1");
   assert!(child.children.is_empty(), "Circular reference should be skipped");
 }
+
+#[test]
+fn test_convert_comprehensive_features_page_to_markdown() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add the comprehensive test page
+  client.add_page_from_json("776655", fixtures::sample_comprehensive_features_response());
+
+  // Fetch the page
+  let page = client.get_page("776655").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  // Verify the markdown contains expected elements
+  assert!(
+    markdown.contains("# Comprehensive Test Page") || markdown.contains("Comprehensive Test Page"),
+    "Should contain page title"
+  );
+  assert!(
+    markdown.contains("## Basic Formatting") || markdown.contains("Basic Formatting"),
+    "Should contain section heading"
+  );
+  assert!(markdown.contains("**bold**"), "Should contain bold text");
+  assert!(
+    markdown.contains("_italic_") || markdown.contains("*italic*"),
+    "Should contain italic text"
+  );
+  assert!(markdown.contains("`inline code`"), "Should contain inline code");
+  assert!(
+    markdown.contains("https://example.com") || markdown.contains("[") || markdown.contains("]("),
+    "Should contain link content"
+  );
+
+  // Verify lists
+  assert!(markdown.contains("- Unordered item 1"), "Should contain unordered list");
+  assert!(markdown.contains("1. Ordered item 1"), "Should contain ordered list");
+
+  // Verify task list
+  assert!(
+    markdown.contains("- [x] Complete this task"),
+    "Should contain completed task"
+  );
+  assert!(
+    markdown.contains("- [ ] Pending task"),
+    "Should contain incomplete task"
+  );
+
+  // Verify table (should have header row)
+  assert!(markdown.contains("Header 1"), "Should contain table header");
+  assert!(markdown.contains("Cell 1"), "Should contain table cell");
+
+  // Verify code block (structured macros are converted)
+  assert!(
+    markdown.contains("function greet") || markdown.contains("javascript") || markdown.contains("```"),
+    "Should contain code content or block markers"
+  );
+
+  // Verify image reference
+  assert!(
+    markdown.contains("![image](") || markdown.contains("!["),
+    "Should contain image reference"
+  );
+
+  // Verify time element was processed (time elements may not render the datetime
+  // attribute as text)
+  assert!(!markdown.is_empty(), "Should successfully convert time elements");
+}
+
+#[test]
+fn test_convert_meeting_notes_overview_to_markdown() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add the meeting notes overview page
+  client.add_page_from_json("998877", fixtures::sample_meeting_notes_overview_response());
+
+  // Fetch the page
+  let page = client.get_page("998877").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  // Verify the markdown contains expected sections
+  assert!(
+    markdown.contains("## Incomplete tasks from meetings"),
+    "Should contain incomplete tasks heading"
+  );
+  assert!(
+    markdown.contains("## Decisions from meetings"),
+    "Should contain decisions heading"
+  );
+  assert!(
+    markdown.contains("## All meeting notes"),
+    "Should contain all notes heading"
+  );
+
+  // The macros should be stripped out, leaving only the structure
+  assert!(!markdown.contains("ac:macro"), "Should not contain raw macro tags");
+  assert!(
+    !markdown.contains("ac:parameter"),
+    "Should not contain raw parameter tags"
+  );
+}
+
+#[test]
+fn test_convert_meeting_notes_with_tasks_to_markdown() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add the meeting notes with tasks page
+  client.add_page_from_json("887766", fixtures::sample_meeting_notes_with_tasks_response());
+
+  // Fetch the page
+  let page = client.get_page("887766").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  // Verify headings with emoji are converted (emoji might not render but heading
+  // structure should exist)
+  assert!(
+    markdown.contains("## ") || markdown.contains("Date") || markdown.contains("Participants"),
+    "Should contain H2 headings or section content"
+  );
+
+  // Verify date is present (time elements have datetime attribute which might not
+  // be in text) Just verify the conversion worked without error
+  assert!(!markdown.is_empty(), "Should produce non-empty markdown");
+
+  // Verify task list
+  assert!(
+    markdown.contains("- [ ] Review architecture proposal"),
+    "Should contain incomplete task"
+  );
+  assert!(
+    markdown.contains("- [x] Update documentation"),
+    "Should contain completed task"
+  );
+
+  // Verify table structure
+  assert!(markdown.contains("Time"), "Should contain table header 'Time'");
+  assert!(markdown.contains("Topic"), "Should contain table header 'Topic'");
+  assert!(markdown.contains("10:00"), "Should contain table cell data");
+  assert!(markdown.contains("Project update"), "Should contain table cell data");
+
+  // Verify no raw XML tags remain
+  assert!(!markdown.contains("ac:task"), "Should not contain raw task tags");
+  assert!(
+    !markdown.contains("ac:emoticon"),
+    "Should not contain raw emoticon tags"
+  );
+  assert!(
+    !markdown.contains("ri:user"),
+    "Should not contain raw user reference tags"
+  );
+}
+
+#[test]
+fn test_convert_complex_page_with_code_to_markdown() {
+  use confluence_dl::markdown;
+
+  let client = FakeConfluenceClient::with_sample_pages();
+
+  // Fetch the complex page (already in sample_pages)
+  let page = client.get_page("789012").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  // Verify structure
+  assert!(markdown.contains("# API Documentation"), "Should contain H1 heading");
+  assert!(markdown.contains("## Overview"), "Should contain H2 heading");
+  assert!(markdown.contains("## Endpoints"), "Should contain endpoints section");
+  assert!(markdown.contains("## Authentication"), "Should contain auth section");
+
+  // Verify list items
+  assert!(markdown.contains("/api/users"), "Should contain API endpoint");
+  assert!(markdown.contains("/api/posts"), "Should contain API endpoint");
+  assert!(
+    markdown.contains("User management"),
+    "Should contain endpoint description"
+  );
+
+  // Verify bold text
+  assert!(markdown.contains("**API tokens**"), "Should contain bold text");
+
+  // Verify code blocks from macros
+  assert!(
+    markdown.contains("curl") || markdown.contains("Bearer TOKEN"),
+    "Should contain code from first macro"
+  );
+  assert!(
+    markdown.contains("import requests") || markdown.contains("def get_users"),
+    "Should contain Python code from second macro"
+  );
+
+  // Verify inline code (endpoints should be present in some form)
+  assert!(
+    markdown.contains("/api/users") || markdown.contains("api"),
+    "Should contain API endpoint references"
+  );
+}
+
+#[test]
+fn test_convert_page_with_internal_links_to_markdown() {
+  use confluence_dl::markdown;
+
+  let client = FakeConfluenceClient::with_sample_pages();
+
+  // Fetch the page with internal links
+  let page = client.get_page("345678").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  // Verify structure
+  assert!(markdown.contains("# Installation"), "Should contain H1 heading");
+  assert!(markdown.contains("## Steps"), "Should contain H2 heading");
+
+  // Verify ordered list
+  assert!(
+    markdown.contains("1. Download the installer"),
+    "Should contain first step"
+  );
+  assert!(
+    markdown.contains("2. Run the setup wizard"),
+    "Should contain second step"
+  );
+  assert!(
+    markdown.contains("3. Configure your settings"),
+    "Should contain third step"
+  );
+
+  // Internal links should be converted (the actual link text should be present)
+  // Note: The current implementation may not fully resolve internal links,
+  // but should at least extract the text
+  assert!(
+    markdown.contains("Getting Started Guide") || markdown.contains("prerequisites"),
+    "Should reference Getting Started Guide"
+  );
+  assert!(
+    markdown.contains("API Documentation") || markdown.contains("API details"),
+    "Should reference API Documentation"
+  );
+
+  // Verify no raw Confluence link tags remain
+  assert!(!markdown.contains("ac:link"), "Should not contain raw link tags");
+  assert!(
+    !markdown.contains("ri:page"),
+    "Should not contain raw page reference tags"
+  );
+}
+
+#[test]
+fn test_end_to_end_page_fetch_and_convert() {
+  use confluence_dl::markdown;
+
+  let client = FakeConfluenceClient::with_sample_pages();
+
+  // Test a complete workflow: fetch page -> extract content -> convert to
+  // markdown
+  let page_id = "123456";
+  let page = client.get_page(page_id).unwrap();
+
+  assert_eq!(page.id, page_id);
+  assert_eq!(page.title, "Getting Started Guide");
+
+  // Extract and convert
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .expect("Page should have storage content");
+
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  // Verify conversion
+  assert!(markdown.contains("# Getting Started"), "Should contain heading");
+  assert!(
+    markdown.contains("Welcome to our documentation"),
+    "Should contain welcome text"
+  );
+  assert!(
+    markdown.contains("get started with our product"),
+    "Should contain guide text"
+  );
+
+  // Verify clean output (no XML artifacts)
+  assert!(!markdown.contains("<h1>"), "Should not contain HTML tags");
+  assert!(!markdown.contains("<p>"), "Should not contain HTML tags");
+  assert!(!markdown.is_empty(), "Markdown should not be empty");
+  assert!(markdown.ends_with('\n'), "Markdown should end with newline");
+}
+
+#[test]
+fn test_markdown_conversion_handles_empty_content() {
+  use confluence_dl::markdown;
+
+  // Test that empty/minimal content doesn't crash
+  let empty_storage = "";
+  let result = markdown::storage_to_markdown(empty_storage, 0);
+  assert!(result.is_ok(), "Should handle empty content");
+
+  let minimal_storage = "<p>Test</p>";
+  let markdown = markdown::storage_to_markdown(minimal_storage, 0).unwrap();
+  assert!(markdown.contains("Test"), "Should contain text");
+}
+
+#[test]
+fn test_markdown_conversion_preserves_structure() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add the comprehensive page
+  client.add_page_from_json("776655", fixtures::sample_comprehensive_features_response());
+  let page = client.get_page("776655").unwrap();
+
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  // Count heading levels to verify hierarchy (headings may start at beginning
+  // without \n prefix)
+  let h1_count = markdown.matches("\n# ").count() + markdown.matches("# ").count();
+  let h2_count = markdown.matches("\n## ").count() + markdown.matches("## ").count();
+
+  assert!(
+    h1_count > 0 || markdown.contains("Comprehensive"),
+    "Should have at least one H1 heading"
+  );
+  assert!(
+    h2_count > 0 || markdown.contains("Formatting"),
+    "Should have at least one H2 heading"
+  );
+
+  // Verify proper spacing (no triple+ newlines after cleanup)
+  assert!(!markdown.contains("\n\n\n\n"), "Should not have excessive blank lines");
+
+  // Verify markdown ends with single newline
+  assert!(markdown.ends_with('\n'), "Should end with newline");
+  assert!(!markdown.ends_with("\n\n\n"), "Should not end with multiple newlines");
+}

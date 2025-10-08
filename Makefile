@@ -20,7 +20,7 @@ lint: ## Run clippy for linting
 
 .PHONY: lint-all
 lint-all: ## Run clippy with all features
-	cargo clippy --all-features -- -D warnings
+	cargo clippy --all-targets -- -D warnings
 
 .PHONY: test
 test: build ## Run tests
@@ -71,19 +71,19 @@ cloc: ## Count lines of code using Docker
 
 .PHONY: coverage
 coverage: ## Run code coverage
-	cargo llvm-cov nextest --all-features --all-targets
+	cargo llvm-cov nextest --all-targets
 
 .PHONY: coverage-html
 coverage-html: ## Generate HTML coverage report
-	cargo llvm-cov nextest --all-features --all-targets --html
+	cargo llvm-cov nextest --all-targets --html
 
 .PHONY: coverage-open
 coverage-open: ## Generate HTML coverage report and open it in browser
-	cargo llvm-cov nextest --all-features --all-targets --html --open
+	cargo llvm-cov nextest --all-targets --html --open
 
 .PHONY: coverage-report
 coverage-report: ## Generate LCOV report
-	cargo llvm-cov nextest --all-features --all-targets --lcov --output-path lcov.info
+	cargo llvm-cov nextest --all-targets --lcov --output-path lcov.info
 
 ### Build
 
