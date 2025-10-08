@@ -103,7 +103,7 @@ confluence-dl 123456 \
 - `-o, --output <DIR>`: Output directory (default: `./confluence-export`)
 - `--images-dir <DIR>`: Where to save images (default: `images`)
 - `--overwrite`: Replace existing files instead of skipping
-- `--format <FORMAT>`: Output format - markdown (default), json, or html
+- Output format: Markdown (additional formats may be explored in the future)
 
 ### 🐚 "I want shell completions"
 
@@ -256,7 +256,7 @@ Remove the extracted files when you're done if you don't need them locally.
 ### Output Control
 
 - `-o, --output <DIR>`: Output directory (default: `./confluence-export`)
-- `--format <FORMAT>`: Output format: markdown, json, html (default: markdown)
+- Output format: Markdown (other formats may return in a future release)
 - `--overwrite`: Overwrite existing files
 
 ### Behavior

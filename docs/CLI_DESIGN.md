@@ -239,13 +239,11 @@ These options are available for all commands:
   -o, --output <DIR>       Output directory
                            [default: ./confluence-export]
 
-  --format <FORMAT>        Output format
-                           [possible: markdown, json, html]
-                           [default: markdown]
-
   --overwrite              Overwrite existing files
                            [default: skip existing]
 ```
+
+*Note: The CLI currently exports Markdown only. Additional formats will be reconsidered once a concrete data model exists.*
 
 ### Behavior Options
 
