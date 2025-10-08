@@ -136,8 +136,6 @@ jobs:
             ./confluence-dl-linux-x86_64-*.tar.gz.sha256
             ./confluence-dl-macos-x86_64-*.tar.gz
             ./confluence-dl-macos-x86_64-*.tar.gz.sha256
-            ./confluence-dl-windows-x86_64-*.zip
-            ./confluence-dl-windows-x86_64-*.zip.sha256
           body_path: release_notes.md
           draft: false
           prerelease: false
