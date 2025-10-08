@@ -11,8 +11,6 @@ A fast, intuitive CLI tool for exporting Confluence pages to Markdown.
 
 **For AI Code Assistants**: Local Confluence docs enable GitHub Copilot, Cursor, and Cline to reference your documentation directly in your workspace without a complicated RAG pipeline.
 
-**Current Status**: v0.1 - Core functionality for page-based exports
-
 ## Quick Start
 
 ```bash
