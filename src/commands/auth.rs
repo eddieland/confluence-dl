@@ -6,7 +6,7 @@ use crate::confluence::{self, ConfluenceApi};
 use crate::credentials::{CredentialsProvider, NetrcProvider};
 
 /// Handle authentication subcommands
-pub(crate) fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &ColorScheme) {
+pub(crate) async fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &ColorScheme) {
   match subcommand {
     AuthCommand::Test => {
       // Verify we have a base URL
@@ -61,7 +61,7 @@ pub(crate) fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &
 
       // Test authentication
       println!("\n{} {}", colors.info("→"), colors.info("Calling Confluence API..."));
-      match client.test_auth() {
+      match client.test_auth().await {
         Ok(user_info) => {
           println!(
             "\n{} {}",

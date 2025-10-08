@@ -10,11 +10,11 @@ use common::fixtures;
 use confluence_dl::confluence::ConfluenceApi;
 use insta::assert_snapshot;
 
-#[test]
-fn test_fetch_basic_page() {
+#[tokio::test]
+async fn test_fetch_basic_page() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("123456").unwrap();
+  let page = client.get_page("123456").await.unwrap();
 
   assert_eq!(page.id, "123456");
   assert_eq!(page.title, "Getting Started Guide");
@@ -31,11 +31,11 @@ fn test_fetch_basic_page() {
   assert!(storage.value.contains("Welcome to our documentation"));
 }
 
-#[test]
-fn test_fetch_complex_page_with_code() {
+#[tokio::test]
+async fn test_fetch_complex_page_with_code() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("789012").unwrap();
+  let page = client.get_page("789012").await.unwrap();
 
   assert_eq!(page.title, "API Documentation");
 
@@ -49,11 +49,11 @@ fn test_fetch_complex_page_with_code() {
   assert!(storage.value.contains("import requests"));
 }
 
-#[test]
-fn test_fetch_page_with_internal_links() {
+#[tokio::test]
+async fn test_fetch_page_with_internal_links() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("345678").unwrap();
+  let page = client.get_page("345678").await.unwrap();
 
   assert_eq!(page.title, "Installation Guide");
 
@@ -67,11 +67,11 @@ fn test_fetch_page_with_internal_links() {
   assert!(storage.value.contains("API Documentation"));
 }
 
-#[test]
-fn test_fetch_personal_space_page() {
+#[tokio::test]
+async fn test_fetch_personal_space_page() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("229483").unwrap();
+  let page = client.get_page("229483").await.unwrap();
 
   assert_eq!(page.title, "Getting started in Confluence from Jira");
 
@@ -82,11 +82,11 @@ fn test_fetch_personal_space_page() {
   assert_eq!(space.name, "Edward Jones");
 }
 
-#[test]
-fn test_fetch_page_with_images() {
+#[tokio::test]
+async fn test_fetch_page_with_images() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("456789").unwrap();
+  let page = client.get_page("456789").await.unwrap();
 
   assert_eq!(page.title, "Architecture Diagram");
 
@@ -99,11 +99,11 @@ fn test_fetch_page_with_images() {
   assert!(storage.value.contains("architecture.png"));
 }
 
-#[test]
-fn test_fetch_nonexistent_page() {
+#[tokio::test]
+async fn test_fetch_nonexistent_page() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let result = client.get_page("999999");
+  let result = client.get_page("999999").await;
 
   assert!(result.is_err());
   let err = result.unwrap_err();
@@ -111,11 +111,11 @@ fn test_fetch_nonexistent_page() {
   assert!(err.to_string().contains("999999"));
 }
 
-#[test]
-fn test_authentication_success() {
+#[tokio::test]
+async fn test_authentication_success() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let result = client.test_auth();
+  let result = client.test_auth().await;
   assert!(result.is_ok());
 
   let user_info = result.unwrap();
@@ -125,12 +125,12 @@ fn test_authentication_success() {
   assert_eq!(user_info.public_name, Some("Test User".to_string()));
 }
 
-#[test]
-fn test_authentication_failure() {
+#[tokio::test]
+async fn test_authentication_failure() {
   let mut client = FakeConfluenceClient::with_sample_pages();
   client.set_auth_success(false);
 
-  let result = client.test_auth();
+  let result = client.test_auth().await;
   assert!(result.is_err());
 
   let err = result.unwrap_err();
@@ -138,40 +138,40 @@ fn test_authentication_failure() {
   assert!(err.to_string().contains("401"));
 }
 
-#[test]
-fn test_custom_page_workflow() {
+#[tokio::test]
+async fn test_custom_page_workflow() {
   let mut client = FakeConfluenceClient::new();
 
   // Start with empty client
-  assert!(client.get_page("custom123").is_err());
+  assert!(client.get_page("custom123").await.is_err());
 
   // Add a custom page
   client.add_page_from_json("custom123", fixtures::sample_page_response());
 
   // Now it should be fetchable
-  let page = client.get_page("custom123").unwrap();
+  let page = client.get_page("custom123").await.unwrap();
   assert_eq!(page.title, "Getting Started Guide");
 }
 
-#[test]
-fn test_multiple_pages_workflow() {
+#[tokio::test]
+async fn test_multiple_pages_workflow() {
   let client = FakeConfluenceClient::with_sample_pages();
 
   // Fetch multiple pages in sequence
   let pages = vec!["123456", "789012", "345678"];
 
   for page_id in pages {
-    let page = client.get_page(page_id).unwrap();
+    let page = client.get_page(page_id).await.unwrap();
     assert_eq!(page.id, page_id);
     assert!(page.body.is_some());
   }
 }
 
-#[test]
-fn test_page_links_metadata() {
+#[tokio::test]
+async fn test_page_links_metadata() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("123456").unwrap();
+  let page = client.get_page("123456").await.unwrap();
 
   // Verify links metadata
   assert!(page.links.is_some());
@@ -184,11 +184,11 @@ fn test_page_links_metadata() {
   assert!(web_ui.contains("/wiki/spaces/DOCS/pages/123456"));
 }
 
-#[test]
-fn test_page_space_metadata() {
+#[tokio::test]
+async fn test_page_space_metadata() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("789012").unwrap();
+  let page = client.get_page("789012").await.unwrap();
 
   let space = page.space.unwrap();
   assert_eq!(space.key, "DEV");
@@ -196,11 +196,11 @@ fn test_page_space_metadata() {
   assert_eq!(space.space_type, "global");
 }
 
-#[test]
-fn test_storage_format_representation() {
+#[tokio::test]
+async fn test_storage_format_representation() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("123456").unwrap();
+  let page = client.get_page("123456").await.unwrap();
   let body = page.body.unwrap();
   let storage = body.storage.unwrap();
 
@@ -208,11 +208,11 @@ fn test_storage_format_representation() {
   assert!(!storage.value.is_empty());
 }
 
-#[test]
-fn test_view_format_representation() {
+#[tokio::test]
+async fn test_view_format_representation() {
   let client = FakeConfluenceClient::with_sample_pages();
 
-  let page = client.get_page("123456").unwrap();
+  let page = client.get_page("123456").await.unwrap();
   let body = page.body.unwrap();
 
   assert!(body.view.is_some());
@@ -222,29 +222,29 @@ fn test_view_format_representation() {
   assert!(!view.value.is_empty());
 }
 
-#[test]
-fn test_error_handling_workflow() {
+#[tokio::test]
+async fn test_error_handling_workflow() {
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   // Test auth failure
   client.set_auth_success(false);
-  assert!(client.test_auth().is_err());
+  assert!(client.test_auth().await.is_err());
 
   // Re-enable auth
   client.set_auth_success(true);
-  assert!(client.test_auth().is_ok());
+  assert!(client.test_auth().await.is_ok());
 
   // Test missing page
-  assert!(client.get_page("nonexistent").is_err());
+  assert!(client.get_page("nonexistent").await.is_err());
 
   // Test existing page
-  assert!(client.get_page("123456").is_ok());
+  assert!(client.get_page("123456").await.is_ok());
 }
 
 use tempfile::TempDir;
 
-#[test]
-fn test_image_download_workflow() {
+#[tokio::test]
+async fn test_image_download_workflow() {
   use confluence_dl::confluence::{Attachment, AttachmentLinks};
   use confluence_dl::images;
 
@@ -270,7 +270,7 @@ fn test_image_download_workflow() {
   client.add_attachments("456789", attachments);
 
   // Get the page with images
-  let page = client.get_page("456789").unwrap();
+  let page = client.get_page("456789").await.unwrap();
   let storage_content = page
     .body
     .as_ref()
@@ -283,7 +283,9 @@ fn test_image_download_workflow() {
   assert!(!image_refs.is_empty(), "Should find images in the page");
 
   // Download images
-  let filename_map = images::download_images(&client, "456789", &image_refs, output_path, "images", false).unwrap();
+  let filename_map = images::download_images(&client, "456789", &image_refs, output_path, "images", false)
+    .await
+    .unwrap();
 
   // Verify images were "downloaded" (fake client creates empty files)
   assert!(!filename_map.is_empty(), "Should have downloaded images");
@@ -306,17 +308,17 @@ fn test_image_download_workflow() {
   );
 }
 
-#[test]
-fn test_get_child_pages_empty() {
+#[tokio::test]
+async fn test_get_child_pages_empty() {
   let client = FakeConfluenceClient::with_sample_pages();
 
   // Page with no children should return empty vec
-  let children = client.get_child_pages("123456").unwrap();
+  let children = client.get_child_pages("123456").await.unwrap();
   assert!(children.is_empty(), "Page should have no children");
 }
 
-#[test]
-fn test_get_child_pages_with_children() {
+#[tokio::test]
+async fn test_get_child_pages_with_children() {
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   // Add child pages
@@ -327,7 +329,7 @@ fn test_get_child_pages_with_children() {
   client.add_child_pages("123456", vec!["111111".to_string(), "222222".to_string()]);
 
   // Get children
-  let children = client.get_child_pages("123456").unwrap();
+  let children = client.get_child_pages("123456").await.unwrap();
   assert_eq!(children.len(), 2, "Should have 2 children");
 
   // Verify child titles
@@ -335,14 +337,14 @@ fn test_get_child_pages_with_children() {
   assert_eq!(children[1].title, "Child Page 2");
 }
 
-#[test]
-fn test_page_tree_single_page() {
+#[tokio::test]
+async fn test_page_tree_single_page() {
   use confluence_dl::confluence::get_page_tree;
 
   let client = FakeConfluenceClient::with_sample_pages();
 
   // Build tree for page with no children
-  let tree = get_page_tree(&client, "123456", None).unwrap();
+  let tree = get_page_tree(&client, "123456", None).await.unwrap();
 
   assert_eq!(tree.page.id, "123456");
   assert_eq!(tree.page.title, "Getting Started Guide");
@@ -350,8 +352,8 @@ fn test_page_tree_single_page() {
   assert!(tree.children.is_empty());
 }
 
-#[test]
-fn test_page_tree_with_children() {
+#[tokio::test]
+async fn test_page_tree_with_children() {
   use confluence_dl::confluence::get_page_tree;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
@@ -362,7 +364,7 @@ fn test_page_tree_with_children() {
   client.add_child_pages("123456", vec!["111111".to_string(), "222222".to_string()]);
 
   // Build tree
-  let tree = get_page_tree(&client, "123456", None).unwrap();
+  let tree = get_page_tree(&client, "123456", None).await.unwrap();
 
   assert_eq!(tree.page.title, "Getting Started Guide");
   assert_eq!(tree.depth, 0);
@@ -379,8 +381,8 @@ fn test_page_tree_with_children() {
   assert!(tree.children[1].children.is_empty());
 }
 
-#[test]
-fn test_page_tree_with_grandchildren() {
+#[tokio::test]
+async fn test_page_tree_with_grandchildren() {
   use confluence_dl::confluence::get_page_tree;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
@@ -392,7 +394,7 @@ fn test_page_tree_with_grandchildren() {
   client.add_child_pages("111111", vec!["333333".to_string()]);
 
   // Build tree with unlimited depth
-  let tree = get_page_tree(&client, "123456", None).unwrap();
+  let tree = get_page_tree(&client, "123456", None).await.unwrap();
 
   assert_eq!(tree.depth, 0);
   assert_eq!(tree.children.len(), 1);
@@ -410,8 +412,8 @@ fn test_page_tree_with_grandchildren() {
   assert!(grandchild.children.is_empty());
 }
 
-#[test]
-fn test_page_tree_max_depth_limit() {
+#[tokio::test]
+async fn test_page_tree_max_depth_limit() {
   use confluence_dl::confluence::get_page_tree;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
@@ -423,7 +425,7 @@ fn test_page_tree_max_depth_limit() {
   client.add_child_pages("111111", vec!["333333".to_string()]);
 
   // Build tree with max_depth = 1 (should stop at children, not grandchildren)
-  let tree = get_page_tree(&client, "123456", Some(1)).unwrap();
+  let tree = get_page_tree(&client, "123456", Some(1)).await.unwrap();
 
   assert_eq!(tree.depth, 0);
   assert_eq!(tree.children.len(), 1);
@@ -440,8 +442,8 @@ fn test_page_tree_max_depth_limit() {
   );
 }
 
-#[test]
-fn test_page_tree_depth_zero() {
+#[tokio::test]
+async fn test_page_tree_depth_zero() {
   use confluence_dl::confluence::get_page_tree;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
@@ -451,14 +453,14 @@ fn test_page_tree_depth_zero() {
   client.add_child_pages("123456", vec!["111111".to_string()]);
 
   // Build tree with max_depth = 0 (should include only root page)
-  let tree = get_page_tree(&client, "123456", Some(0)).unwrap();
+  let tree = get_page_tree(&client, "123456", Some(0)).await.unwrap();
 
   assert_eq!(tree.depth, 0);
   assert!(tree.children.is_empty(), "Should not fetch children when max_depth=0");
 }
 
-#[test]
-fn test_page_tree_circular_reference_detection() {
+#[tokio::test]
+async fn test_page_tree_circular_reference_detection() {
   use confluence_dl::confluence::get_page_tree;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
@@ -470,7 +472,7 @@ fn test_page_tree_circular_reference_detection() {
 
   // The function should successfully build the tree but skip the circular
   // reference (it logs a warning and continues with other children)
-  let result = get_page_tree(&client, "123456", None);
+  let result = get_page_tree(&client, "123456", None).await;
 
   assert!(result.is_ok(), "Should handle circular reference gracefully");
   let tree = result.unwrap();
@@ -485,8 +487,8 @@ fn test_page_tree_circular_reference_detection() {
   assert!(child.children.is_empty(), "Circular reference should be skipped");
 }
 
-#[test]
-fn test_convert_comprehensive_features_page_to_markdown() {
+#[tokio::test]
+async fn test_convert_comprehensive_features_page_to_markdown() {
   use confluence_dl::markdown;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
@@ -495,7 +497,7 @@ fn test_convert_comprehensive_features_page_to_markdown() {
   client.add_page_from_json("776655", fixtures::sample_comprehensive_features_response());
 
   // Fetch the page
-  let page = client.get_page("776655").unwrap();
+  let page = client.get_page("776655").await.unwrap();
 
   // Extract storage content
   let storage_content = page
@@ -511,8 +513,8 @@ fn test_convert_comprehensive_features_page_to_markdown() {
   assert_snapshot!(markdown);
 }
 
-#[test]
-fn test_convert_meeting_notes_overview_to_markdown() {
+#[tokio::test]
+async fn test_convert_meeting_notes_overview_to_markdown() {
   use confluence_dl::markdown;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
@@ -521,7 +523,7 @@ fn test_convert_meeting_notes_overview_to_markdown() {
   client.add_page_from_json("998877", fixtures::sample_meeting_notes_overview_response());
 
   // Fetch the page
-  let page = client.get_page("998877").unwrap();
+  let page = client.get_page("998877").await.unwrap();
 
   // Extract storage content
   let storage_content = page
@@ -537,8 +539,8 @@ fn test_convert_meeting_notes_overview_to_markdown() {
   assert_snapshot!(markdown);
 }
 
-#[test]
-fn test_convert_meeting_notes_with_tasks_to_markdown() {
+#[tokio::test]
+async fn test_convert_meeting_notes_with_tasks_to_markdown() {
   use confluence_dl::markdown;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
@@ -547,7 +549,7 @@ fn test_convert_meeting_notes_with_tasks_to_markdown() {
   client.add_page_from_json("887766", fixtures::sample_meeting_notes_with_tasks_response());
 
   // Fetch the page
-  let page = client.get_page("887766").unwrap();
+  let page = client.get_page("887766").await.unwrap();
 
   // Extract storage content
   let storage_content = page
@@ -563,14 +565,14 @@ fn test_convert_meeting_notes_with_tasks_to_markdown() {
   assert_snapshot!(markdown);
 }
 
-#[test]
-fn test_convert_complex_page_with_code_to_markdown() {
+#[tokio::test]
+async fn test_convert_complex_page_with_code_to_markdown() {
   use confluence_dl::markdown;
 
   let client = FakeConfluenceClient::with_sample_pages();
 
   // Fetch the complex page (already in sample_pages)
-  let page = client.get_page("789012").unwrap();
+  let page = client.get_page("789012").await.unwrap();
 
   // Extract storage content
   let storage_content = page
@@ -586,14 +588,14 @@ fn test_convert_complex_page_with_code_to_markdown() {
   assert_snapshot!(markdown);
 }
 
-#[test]
-fn test_convert_page_with_internal_links_to_markdown() {
+#[tokio::test]
+async fn test_convert_page_with_internal_links_to_markdown() {
   use confluence_dl::markdown;
 
   let client = FakeConfluenceClient::with_sample_pages();
 
   // Fetch the page with internal links
-  let page = client.get_page("345678").unwrap();
+  let page = client.get_page("345678").await.unwrap();
 
   // Extract storage content
   let storage_content = page
@@ -609,8 +611,8 @@ fn test_convert_page_with_internal_links_to_markdown() {
   assert_snapshot!(markdown);
 }
 
-#[test]
-fn test_end_to_end_page_fetch_and_convert() {
+#[tokio::test]
+async fn test_end_to_end_page_fetch_and_convert() {
   use confluence_dl::markdown;
 
   let client = FakeConfluenceClient::with_sample_pages();
@@ -618,7 +620,7 @@ fn test_end_to_end_page_fetch_and_convert() {
   // Test a complete workflow: fetch page -> extract content -> convert to
   // markdown
   let page_id = "123456";
-  let page = client.get_page(page_id).unwrap();
+  let page = client.get_page(page_id).await.unwrap();
 
   assert_eq!(page.id, page_id);
   assert_eq!(page.title, "Getting Started Guide");
@@ -636,8 +638,8 @@ fn test_end_to_end_page_fetch_and_convert() {
   assert_snapshot!(markdown);
 }
 
-#[test]
-fn test_markdown_conversion_handles_empty_content() {
+#[tokio::test]
+async fn test_markdown_conversion_handles_empty_content() {
   use confluence_dl::markdown;
 
   // Test that empty/minimal content doesn't crash
@@ -650,15 +652,15 @@ fn test_markdown_conversion_handles_empty_content() {
   assert!(markdown.contains("Test"), "Should contain text");
 }
 
-#[test]
-fn test_markdown_conversion_preserves_structure() {
+#[tokio::test]
+async fn test_markdown_conversion_preserves_structure() {
   use confluence_dl::markdown;
 
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   // Add the comprehensive page
   client.add_page_from_json("776655", fixtures::sample_comprehensive_features_response());
-  let page = client.get_page("776655").unwrap();
+  let page = client.get_page("776655").await.unwrap();
 
   let storage_content = page
     .body

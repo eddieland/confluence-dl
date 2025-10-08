@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
+use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::{Deserialize, Serialize};
@@ -13,21 +14,22 @@ use url::Url;
 
 /// Trait for Confluence API operations (enables testing with fake
 /// implementations)
-pub trait ConfluenceApi {
+#[async_trait]
+pub trait ConfluenceApi: Send + Sync {
   /// Fetch a page by ID
-  fn get_page(&self, page_id: &str) -> Result<Page>;
+  async fn get_page(&self, page_id: &str) -> Result<Page>;
 
   /// Get child pages for a given page ID
-  fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>>;
+  async fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>>;
 
   /// Get attachments for a page
-  fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>>;
+  async fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>>;
 
   /// Download an attachment by URL to a file
-  fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()>;
+  async fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()>;
 
   /// Test authentication and return user information
-  fn test_auth(&self) -> Result<UserInfo>;
+  async fn test_auth(&self) -> Result<UserInfo>;
 }
 
 /// Confluence API client
@@ -35,7 +37,7 @@ pub struct ConfluenceClient {
   base_url: String,
   username: String,
   token: String,
-  client: reqwest::blocking::Client,
+  client: reqwest::Client,
 }
 
 /// Confluence page metadata and content
@@ -174,7 +176,7 @@ impl ConfluenceClient {
     let base_url = base_url.trim_end_matches('/').to_string();
 
     // Create HTTP client with timeout
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
       .timeout(Duration::from_secs(timeout_secs))
       .user_agent(format!(
         "confluence-dl/{} ({})",
@@ -199,8 +201,9 @@ impl ConfluenceClient {
   }
 }
 
+#[async_trait]
 impl ConfluenceApi for ConfluenceClient {
-  fn get_page(&self, page_id: &str) -> Result<Page> {
+  async fn get_page(&self, page_id: &str) -> Result<Page> {
     let url = format!(
       "{}/wiki/rest/api/content/{}?expand=body.storage,body.view,space",
       self.base_url, page_id
@@ -212,22 +215,27 @@ impl ConfluenceApi for ConfluenceClient {
       .header("Authorization", self.auth_header())
       .header("Accept", "application/json")
       .send()
+      .await
       .context("Failed to send request to Confluence API")?;
 
     if !response.status().is_success() {
       let status = response.status();
-      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      let error_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::from("(no error details)"));
       return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
     }
 
     let page: Page = response
       .json()
+      .await
       .context("Failed to parse page response from Confluence API")?;
 
     Ok(page)
   }
 
-  fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>> {
+  async fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>> {
     let url = format!("{}/wiki/rest/api/content/{}/child/page", self.base_url, page_id);
 
     let response = self
@@ -236,22 +244,27 @@ impl ConfluenceApi for ConfluenceClient {
       .header("Authorization", self.auth_header())
       .header("Accept", "application/json")
       .send()
+      .await
       .context("Failed to fetch child pages from Confluence API")?;
 
     if !response.status().is_success() {
       let status = response.status();
-      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      let error_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::from("(no error details)"));
       return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
     }
 
     let child_pages: ChildPagesResponse = response
       .json()
+      .await
       .context("Failed to parse child pages response from Confluence API")?;
 
     Ok(child_pages.results)
   }
 
-  fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
+  async fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
     let url = format!("{}/wiki/rest/api/content/{}/child/attachment", self.base_url, page_id);
 
     let response = self
@@ -260,22 +273,27 @@ impl ConfluenceApi for ConfluenceClient {
       .header("Authorization", self.auth_header())
       .header("Accept", "application/json")
       .send()
+      .await
       .context("Failed to fetch attachments from Confluence API")?;
 
     if !response.status().is_success() {
       let status = response.status();
-      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      let error_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::from("(no error details)"));
       return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
     }
 
     let attachments: AttachmentsResponse = response
       .json()
+      .await
       .context("Failed to parse attachments response from Confluence API")?;
 
     Ok(attachments.results)
   }
 
-  fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()> {
+  async fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()> {
     // Build full URL if it's a relative path
     let full_url = if url.starts_with("http://") || url.starts_with("https://") {
       url.to_string()
@@ -288,11 +306,15 @@ impl ConfluenceApi for ConfluenceClient {
       .get(&full_url)
       .header("Authorization", self.auth_header())
       .send()
+      .await
       .context("Failed to download attachment")?;
 
     let status = response.status();
     if !status.is_success() {
-      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      let error_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::from("(no error details)"));
       let attachment_name = output_path
         .file_name()
         .and_then(|name| name.to_str())
@@ -304,17 +326,21 @@ impl ConfluenceApi for ConfluenceClient {
 
     // Create parent directory if it doesn't exist
     if let Some(parent) = output_path.parent() {
-      std::fs::create_dir_all(parent).context("Failed to create output directory for attachment")?;
+      tokio::fs::create_dir_all(parent)
+        .await
+        .context("Failed to create output directory for attachment")?;
     }
 
     // Write response bytes to file
-    let bytes = response.bytes().context("Failed to read attachment bytes")?;
-    std::fs::write(output_path, bytes).context("Failed to write attachment to file")?;
+    let bytes = response.bytes().await.context("Failed to read attachment bytes")?;
+    tokio::fs::write(output_path, bytes)
+      .await
+      .context("Failed to write attachment to file")?;
 
     Ok(())
   }
 
-  fn test_auth(&self) -> Result<UserInfo> {
+  async fn test_auth(&self) -> Result<UserInfo> {
     let url = format!("{}/wiki/rest/api/user/current", self.base_url);
 
     let response = self
@@ -323,16 +349,21 @@ impl ConfluenceApi for ConfluenceClient {
       .header("Authorization", self.auth_header())
       .header("Accept", "application/json")
       .send()
+      .await
       .context("Failed to send authentication test request")?;
 
     if !response.status().is_success() {
       let status = response.status();
-      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      let error_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::from("(no error details)"));
       return Err(anyhow!("Authentication failed with status {status}: {error_text}"));
     }
 
     let user_info: UserInfo = response
       .json()
+      .await
       .context("Failed to parse user information from Confluence API")?;
 
     Ok(user_info)
@@ -404,51 +435,53 @@ pub fn parse_confluence_url(url: &str) -> Result<UrlInfo> {
 ///
 /// # Returns
 /// A `PageTree` structure containing the page and all its children
-pub fn get_page_tree(client: &dyn ConfluenceApi, page_id: &str, max_depth: Option<usize>) -> Result<PageTree> {
-  get_page_tree_recursive(client, page_id, 0, max_depth, &mut std::collections::HashSet::new())
+pub async fn get_page_tree(client: &dyn ConfluenceApi, page_id: &str, max_depth: Option<usize>) -> Result<PageTree> {
+  get_page_tree_recursive(client, page_id, 0, max_depth, &mut std::collections::HashSet::new()).await
 }
 
 /// Recursive helper for building page trees
-fn get_page_tree_recursive(
-  client: &dyn ConfluenceApi,
-  page_id: &str,
+fn get_page_tree_recursive<'a>(
+  client: &'a dyn ConfluenceApi,
+  page_id: &'a str,
   current_depth: usize,
   max_depth: Option<usize>,
-  visited: &mut std::collections::HashSet<String>,
-) -> Result<PageTree> {
-  // Check for circular references
-  if visited.contains(page_id) {
-    return Err(anyhow!("Circular reference detected: page {page_id} already visited"));
-  }
-  visited.insert(page_id.to_string());
+  visited: &'a mut std::collections::HashSet<String>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<PageTree>> + 'a + Send>> {
+  Box::pin(async move {
+    // Check for circular references
+    if visited.contains(page_id) {
+      return Err(anyhow!("Circular reference detected: page {page_id} already visited"));
+    }
+    visited.insert(page_id.to_string());
 
-  // Fetch the page
-  let page = client.get_page(page_id)?;
+    // Fetch the page
+    let page = client.get_page(page_id).await?;
 
-  // Check if we should fetch children
-  let children = if max_depth.is_none() || current_depth < max_depth.unwrap() {
-    let child_pages = client.get_child_pages(page_id)?;
-    let mut child_trees = Vec::new();
+    // Check if we should fetch children
+    let children = if max_depth.is_none() || current_depth < max_depth.unwrap() {
+      let child_pages = client.get_child_pages(page_id).await?;
+      let mut child_trees = Vec::new();
 
-    for child_page in child_pages {
-      match get_page_tree_recursive(client, &child_page.id, current_depth + 1, max_depth, visited) {
-        Ok(child_tree) => child_trees.push(child_tree),
-        Err(e) => {
-          // Log the error but continue with other children
-          eprintln!("Warning: Failed to fetch child page {}: {}", child_page.id, e);
+      for child_page in child_pages {
+        match get_page_tree_recursive(client, &child_page.id, current_depth + 1, max_depth, visited).await {
+          Ok(child_tree) => child_trees.push(child_tree),
+          Err(e) => {
+            // Log the error but continue with other children
+            eprintln!("Warning: Failed to fetch child page {}: {}", child_page.id, e);
+          }
         }
       }
-    }
 
-    child_trees
-  } else {
-    Vec::new()
-  };
+      child_trees
+    } else {
+      Vec::new()
+    };
 
-  Ok(PageTree {
-    page,
-    children,
-    depth: current_depth,
+    Ok(PageTree {
+      page,
+      children,
+      depth: current_depth,
+    })
   })
 }
 
