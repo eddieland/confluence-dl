@@ -2,6 +2,7 @@
 //!
 //! This is the main entry point for the CLI application.
 
+mod attachments;
 mod cli;
 mod color;
 mod commands;

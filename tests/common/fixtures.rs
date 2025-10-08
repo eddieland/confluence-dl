@@ -220,6 +220,40 @@ pub fn sample_page_with_images_response() -> serde_json::Value {
   })
 }
 
+// Sample response for a page with a file attachment link
+pub fn sample_page_with_attachment_response() -> serde_json::Value {
+  json!({
+    "id": "654321",
+    "type": "page",
+    "status": "current",
+    "title": "Project Resources",
+    "body": {
+      "storage": {
+        "value": r#"<p>Download the latest resources:</p>
+<ac:link>
+  <ri:attachment ri:filename="project-plan.pdf" />
+  <ac:plain-text-link-body>Project Plan</ac:plain-text-link-body>
+</ac:link>
+"#,
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<p>Download the latest resources.</p>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "PROJ",
+      "name": "Project Space",
+      "type": "global"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/PROJ/pages/654321/Project+Resources",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/654321"
+    }
+  })
+}
+
 // Sample response for child pages
 pub fn sample_child_page_1_response() -> serde_json::Value {
   json!({
