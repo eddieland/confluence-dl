@@ -1,5 +1,6 @@
 ---
 source: tests/e2e_tests.rs
+assertion_line: 511
 expression: markdown
 ---
 # Comprehensive Test Page
@@ -14,7 +15,7 @@ It also has `inline code` and [external links](https://example.com).
 
 - Unordered item 1
 - Unordered item 2
-- Nested item
+  - Nested item
 
 1. Ordered item 1
 2. Ordered item 2

@@ -15,6 +15,76 @@ use super::macros::{
 use super::tables::convert_table_to_markdown;
 use super::utils::{get_attribute, get_element_text, matches_tag};
 
+fn looks_like_list_marker(line: &str) -> bool {
+  let trimmed = line.trim_start();
+
+  if trimmed.starts_with(['-', '*', '+']) {
+    return trimmed.len() > 1 && trimmed.as_bytes()[1] == b' ';
+  }
+
+  let mut chars = trimmed.chars();
+  let mut saw_digit = false;
+
+  while let Some(ch) = chars.next() {
+    if ch.is_ascii_digit() {
+      saw_digit = true;
+      continue;
+    }
+
+    if ch == '.' {
+      return saw_digit && matches!(chars.next(), Some(' '));
+    }
+
+    break;
+  }
+
+  false
+}
+
+fn format_list_item(item: &str, prefix: &str) -> String {
+  let mut formatted = String::new();
+  let lines = item.trim_end().lines();
+  let indentation = " ".repeat(prefix.chars().count());
+  let mut wrote_first_line = false;
+
+  for line in lines {
+    if !wrote_first_line {
+      if line.trim().is_empty() {
+        continue;
+      }
+
+      let line_content = line.trim_start();
+
+      if looks_like_list_marker(line_content) {
+        formatted.push_str(prefix.trim_end());
+        formatted.push('\n');
+        formatted.push_str(&indentation);
+        formatted.push_str(line_content);
+        formatted.push('\n');
+      } else {
+        formatted.push_str(prefix);
+        formatted.push_str(line_content);
+        formatted.push('\n');
+      }
+
+      wrote_first_line = true;
+    } else if line.trim().is_empty() {
+      formatted.push('\n');
+    } else {
+      formatted.push_str(&indentation);
+      formatted.push_str(line);
+      formatted.push('\n');
+    }
+  }
+
+  if !wrote_first_line {
+    formatted.push_str(prefix.trim_end());
+    formatted.push('\n');
+  }
+
+  formatted
+}
+
 /// Convert an element and its children to markdown recursively.
 pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
   let mut result = String::new();
@@ -66,16 +136,17 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           "ul" => {
             result.push('\n');
             for li in child.children().filter(|n| matches_tag(*n, "li")) {
-              let item = convert_node_to_markdown(li, verbose).trim().to_string();
-              result.push_str(&format!("- {item}\n"));
+              let item = convert_node_to_markdown(li, verbose);
+              result.push_str(&format_list_item(&item, "- "));
             }
             result.push('\n');
           }
           "ol" => {
             result.push('\n');
             for (index, li) in child.children().filter(|n| matches_tag(*n, "li")).enumerate() {
-              let item = convert_node_to_markdown(li, verbose).trim().to_string();
-              result.push_str(&format!("{}. {item}\n", index + 1));
+              let item = convert_node_to_markdown(li, verbose);
+              let prefix = format!("{}. ", index + 1);
+              result.push_str(&format_list_item(&item, &prefix));
             }
             result.push('\n');
           }
@@ -256,6 +327,32 @@ mod tests {
     let result = convert_to_markdown(input, 0);
     let output = result.escape_default();
     insta::assert_snapshot!(output, @r"- Item 1\n- Item 2\n\n      \n1. First\n2. Second\n");
+  }
+
+  #[test]
+  fn test_convert_nested_lists() {
+    let input = r#"
+      <ul>
+        <li>Parent
+          <ul>
+            <li>Child</li>
+            <li>Nested
+              <ul>
+                <li>Grandchild</li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    "#;
+
+    let result = convert_to_markdown(input, 0);
+    let output = result.escape_default();
+
+    insta::assert_snapshot!(
+      output,
+      @r"- Parent\n\n  - Child\n  - Nested\n\n    - Grandchild\n"
+    );
   }
 
   #[test]
