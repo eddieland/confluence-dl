@@ -38,6 +38,15 @@ fn embed_build_info() {
 
   // Store the target architecture
   println!("cargo:rustc-env=TARGET={}", env::var("TARGET").unwrap_or_default());
+
+  // Capture the Rust compiler version at build time
+  // Falls back to unknown if rustc is unavailable
+  if let Ok(output) = Command::new("rustc").args(["--version"]).output() {
+    let rustc_version = String::from_utf8(output.stdout).unwrap_or_default().trim().to_string();
+    println!("cargo:rustc-env=RUSTC_VERSION={rustc_version}");
+  } else {
+    println!("cargo:rustc-env=RUSTC_VERSION=unknown");
+  }
 }
 
 /// Configures conditions that trigger build script re-execution.

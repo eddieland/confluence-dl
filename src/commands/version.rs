@@ -57,8 +57,9 @@ fn format_timestamp(timestamp: &str) -> String {
 }
 
 /// Get Rust compiler version
+///
+/// Returns the actual rustc version used to build this binary,
+/// captured at build time by build.rs.
 fn rustc_version() -> String {
-  // This could be enhanced to capture the actual rustc version at build time
-  // For now, return a placeholder
-  env!("CARGO_PKG_RUST_VERSION").to_string()
+  env!("RUSTC_VERSION").to_string()
 }
