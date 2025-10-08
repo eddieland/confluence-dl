@@ -36,17 +36,28 @@ fn replace_html_entities(text: &str, entities: &[(&'static str, &'static str)], 
         result.push_str(replacement);
         index += entity.len();
 
-        if decode_numeric
-          && replacement == "&"
-          && let Some(remaining) = text.get(index..)
-          && remaining.starts_with('#')
-          && let Some(semi_offset) = remaining.find(';')
-          && let Some(decoded) = decode_numeric_entity(&remaining[..semi_offset])
-        {
-          // Replace the `&` we just inserted with the decoded numeric entity.
-          result.pop();
-          result.push(decoded);
-          index += semi_offset + 1;
+        if decode_numeric {
+          if let Some((nested_entity, nested_replacement)) = match_named_entity_following_amp(&text[index..], entities)
+          {
+            // Replace the `&` we just inserted with the decoded named entity.
+            result.pop();
+            result.push_str(nested_replacement);
+            index += nested_entity.len() - 1;
+            continue;
+          }
+
+          if replacement == "&"
+            && let Some(remaining) = text.get(index..)
+            && remaining.starts_with('#')
+            && let Some(semi_offset) = remaining.find(';')
+            && let Some(decoded) = decode_numeric_entity(&remaining[..semi_offset])
+          {
+            // Replace the `&` we just inserted with the decoded numeric entity.
+            result.pop();
+            result.push(decoded);
+            index += semi_offset + 1;
+            continue;
+          }
         }
 
         continue;
@@ -72,6 +83,18 @@ fn replace_html_entities(text: &str, entities: &[(&'static str, &'static str)], 
 
 fn match_named_entity(text: &str, entities: &[(&'static str, &'static str)]) -> Option<(&'static str, &'static str)> {
   entities.iter().find(|(entity, _)| text.starts_with(entity)).copied()
+}
+
+fn match_named_entity_following_amp(
+  text: &str,
+  entities: &[(&'static str, &'static str)],
+) -> Option<(&'static str, &'static str)> {
+  entities.iter().find_map(|(entity, replacement)| {
+    entity
+      .strip_prefix('&')
+      .filter(|suffix| text.starts_with(suffix))
+      .map(|_| (*entity, *replacement))
+  })
 }
 
 /// Decode a single numeric HTML entity (without the `&` and `;`).
@@ -167,5 +190,13 @@ mod tests {
   fn test_decode_double_encoded_numeric_entities() {
     assert_eq!(decode_html_entities("&amp;#39;"), "'");
     assert_eq!(decode_html_entities("&amp;#x1F44B;"), "👋");
+  }
+
+  #[test]
+  fn test_decode_double_encoded_named_entities() {
+    assert_eq!(decode_html_entities("&amp;lt;"), "<");
+    assert_eq!(decode_html_entities("&amp;mdash;"), "—");
+    assert_eq!(decode_html_entities("&amp;amp;"), "&");
+    assert_eq!(decode_html_entities("&amp;nbsp;"), " ");
   }
 }
