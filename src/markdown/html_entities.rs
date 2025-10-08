@@ -35,6 +35,20 @@ fn replace_html_entities(text: &str, entities: &[(&'static str, &'static str)], 
       if let Some((entity, replacement)) = match_named_entity(&text[index..], entities) {
         result.push_str(replacement);
         index += entity.len();
+
+        if decode_numeric
+          && replacement == "&"
+          && let Some(remaining) = text.get(index..)
+          && remaining.starts_with('#')
+          && let Some(semi_offset) = remaining.find(';')
+          && let Some(decoded) = decode_numeric_entity(&remaining[..semi_offset])
+        {
+          // Replace the `&` we just inserted with the decoded numeric entity.
+          result.pop();
+          result.push(decoded);
+          index += semi_offset + 1;
+        }
+
         continue;
       }
 
@@ -147,5 +161,11 @@ mod tests {
     let input = "&nbsp;&rsquo;&lsquo;&rdquo;&ldquo;&mdash;&ndash;&amp;&lt;&gt;&quot;&rarr;&larr;&#39;";
     let output = decode_html_entities(input);
     assert_eq!(output, " ''\"\"—–&<>\"→←'");
+  }
+
+  #[test]
+  fn test_decode_double_encoded_numeric_entities() {
+    assert_eq!(decode_html_entities("&amp;#39;"), "'");
+    assert_eq!(decode_html_entities("&amp;#x1F44B;"), "👋");
   }
 }
