@@ -1,7 +1,9 @@
 use std::collections::HashSet;
+use std::fs::{self, OpenOptions};
+use std::io::{ErrorKind, Write};
 use std::path::Path;
+use std::process;
 use std::sync::Arc;
-use std::{fs, process};
 
 use anyhow::Context;
 use futures::future::join_all;
@@ -396,32 +398,43 @@ fn download_page_tree<'a>(
     // Generate output path
     let output_path = output_dir.join(format!("{filename}.md"));
 
-    // Check if file exists and handle overwrite
-    if output_path.exists() && !cli.output.overwrite {
-      let message = format!(
-        "File already exists: {}. Use --overwrite to replace it.",
-        output_path.display()
-      );
-
-      eprintln!("{} {}", colors.error("✗"), colors.error(&message));
-
-      anyhow::bail!(message);
-    } else {
-      // Create parent directory
-      if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent).with_context(|| format!("Failed to create directory {}", parent.display()))?;
-      }
-
-      // Write markdown to file
-      fs::write(&output_path, markdown)
-        .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
-
-      if !cli.behavior.quiet {
-        println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
-      }
-
-      // Raw XML was already saved before parsing (if requested)
+    // Create parent directory
+    if let Some(parent) = output_path.parent() {
+      fs::create_dir_all(parent).with_context(|| format!("Failed to create directory {}", parent.display()))?;
     }
+
+    if cli.output.overwrite {
+      // Write markdown to file
+      fs::write(&output_path, &markdown)
+        .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
+    } else {
+      match OpenOptions::new().write(true).create_new(true).open(&output_path) {
+        Ok(mut file) => {
+          file
+            .write_all(markdown.as_bytes())
+            .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
+        }
+        Err(err) if err.kind() == ErrorKind::AlreadyExists => {
+          let message = format!(
+            "File already exists: {}. Use --overwrite to replace it.",
+            output_path.display()
+          );
+
+          eprintln!("{} {}", colors.error("✗"), colors.error(&message));
+
+          anyhow::bail!(message);
+        }
+        Err(err) => {
+          anyhow::bail!("Failed to create markdown file {}: {}", output_path.display(), err);
+        }
+      }
+    }
+
+    if !cli.behavior.quiet {
+      println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
+    }
+
+    // Raw XML was already saved before parsing (if requested)
 
     // Release permit before scheduling children so they can use the slot.
     drop(permit);
