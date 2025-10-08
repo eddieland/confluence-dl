@@ -309,6 +309,74 @@ async fn test_image_download_workflow() {
 }
 
 #[tokio::test]
+async fn test_attachment_download_workflow() {
+  use confluence_dl::confluence::{Attachment, AttachmentLinks};
+  use confluence_dl::{attachments, markdown};
+
+  let temp_dir = TempDir::new().unwrap();
+  let output_path = temp_dir.path();
+
+  let mut client = FakeConfluenceClient::new();
+  client.add_page_from_json("654321", fixtures::sample_page_with_attachment_response());
+
+  let attachments_meta = vec![Attachment {
+    id: "file1".to_string(),
+    title: "project-plan.pdf".to_string(),
+    attachment_type: "attachment".to_string(),
+    media_type: Some("application/pdf".to_string()),
+    file_size: Some(4096),
+    links: Some(AttachmentLinks {
+      download: Some("/wiki/download/attachments/654321/project-plan.pdf".to_string()),
+    }),
+  }];
+  client.add_attachments("654321", attachments_meta);
+
+  let page = client.get_page("654321").await.unwrap();
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  let mut markdown = markdown::storage_to_markdown(storage_content).unwrap();
+
+  let downloaded = attachments::download_attachments(&client, "654321", output_path, false, None)
+    .await
+    .unwrap();
+  assert_eq!(downloaded.len(), 1);
+
+  markdown = attachments::update_markdown_attachment_links(&markdown, &downloaded);
+
+  let attachment_path = output_path.join(&downloaded[0].relative_path);
+  assert!(
+    attachment_path.exists(),
+    "Attachment should exist at {:?}",
+    attachment_path
+  );
+
+  assert!(
+    markdown.contains("](attachments/project-plan.pdf)"),
+    "Markdown should reference the local attachment path: {markdown}"
+  );
+
+  let second_download = attachments::download_attachments(&client, "654321", output_path, false, None)
+    .await
+    .unwrap();
+
+  assert_eq!(second_download.len(), 1);
+  assert_eq!(second_download[0].relative_path, downloaded[0].relative_path);
+
+  let attachment_dir = output_path.join(attachments::ATTACHMENTS_DIR);
+  let file_count = std::fs::read_dir(&attachment_dir).map(|iter| iter.count()).unwrap_or(0);
+  assert_eq!(
+    file_count, 1,
+    "Expected a single attachment file without duplicates in {:?}",
+    attachment_dir
+  );
+}
+
+#[tokio::test]
 async fn test_get_child_pages_empty() {
   let client = FakeConfluenceClient::with_sample_pages();
 

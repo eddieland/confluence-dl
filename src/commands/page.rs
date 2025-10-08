@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::{fs, process};
 
@@ -7,7 +8,7 @@ use crate::cli::Cli;
 use crate::color::ColorScheme;
 use crate::commands::auth::load_credentials;
 use crate::confluence::{self, ConfluenceApi};
-use crate::{images, markdown};
+use crate::{attachments, images, markdown};
 
 /// Handle page download
 pub(crate) async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
@@ -147,6 +148,8 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
     );
   }
 
+  let mut downloaded_image_filenames = HashSet::new();
+
   // Download images if requested
   if cli.images_links.download_images {
     println!("\n{} {}", colors.info("→"), colors.info("Processing images"));
@@ -181,10 +184,48 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
         if filename_map.len() == 1 { "image" } else { "images" }
       );
 
+      downloaded_image_filenames.extend(filename_map.keys().cloned());
+
       // Update markdown links to reference local files
       markdown = images::update_markdown_image_links(&markdown, &filename_map);
     } else {
       println!("  {}", colors.dimmed("No images found in page"));
+    }
+  }
+
+  if cli.page.attachments {
+    println!("\n{} {}", colors.info("→"), colors.info("Downloading attachments"));
+
+    let skip_titles = if downloaded_image_filenames.is_empty() {
+      None
+    } else {
+      Some(&downloaded_image_filenames)
+    };
+
+    let downloaded_attachments = attachments::download_attachments(
+      &client,
+      &url_info.page_id,
+      Path::new(&cli.output.output),
+      cli.output.overwrite,
+      skip_titles,
+    )
+    .await?;
+
+    if downloaded_attachments.is_empty() {
+      println!("  {}", colors.dimmed("No attachments found in page"));
+    } else {
+      println!(
+        "  {} Downloaded {} {}",
+        colors.success("✓"),
+        colors.number(downloaded_attachments.len()),
+        if downloaded_attachments.len() == 1 {
+          "attachment"
+        } else {
+          "attachments"
+        }
+      );
+
+      markdown = attachments::update_markdown_attachment_links(&markdown, &downloaded_attachments);
     }
   }
 
@@ -274,6 +315,8 @@ fn download_page_tree<'a>(
     let mut markdown = markdown::storage_to_markdown(storage_content)
       .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
 
+    let mut downloaded_image_filenames = HashSet::new();
+
     // Download images if requested
     if cli.images_links.download_images {
       let image_refs = images::extract_image_references(storage_content)?;
@@ -289,7 +332,33 @@ fn download_page_tree<'a>(
         )
         .await?;
 
+        downloaded_image_filenames.extend(filename_map.keys().cloned());
+
         markdown = images::update_markdown_image_links(&markdown, &filename_map);
+      }
+    }
+
+    if cli.page.attachments {
+      let skip_titles = if downloaded_image_filenames.is_empty() {
+        None
+      } else {
+        Some(&downloaded_image_filenames)
+      };
+
+      let downloaded_attachments =
+        attachments::download_attachments(client, &page.id, output_dir, cli.output.overwrite, skip_titles).await?;
+
+      if !downloaded_attachments.is_empty() {
+        if cli.behavior.verbose > 0 {
+          println!(
+            "    {} {}",
+            colors.dimmed("Attachments:"),
+            colors.number(downloaded_attachments.len())
+          );
+        }
+        markdown = attachments::update_markdown_attachment_links(&markdown, &downloaded_attachments);
+      } else if cli.behavior.verbose > 1 {
+        println!("    {}", colors.dimmed("No attachments found"));
       }
     }
 

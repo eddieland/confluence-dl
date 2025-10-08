@@ -264,6 +264,20 @@ pub fn convert_confluence_link_to_markdown(element: Node) -> String {
     return format!("[[{title}]]");
   }
 
+  // Check for attachment link
+  if let Some(attachment_node) = find_child_by_tag(element, "ri:attachment") {
+    let filename = get_attribute(attachment_node, "ri:filename").unwrap_or_default();
+
+    if !filename.is_empty() {
+      let link_text = find_child_by_tag(element, "ac:plain-text-link-body")
+        .map(get_element_text)
+        .filter(|text| !text.trim().is_empty())
+        .unwrap_or_else(|| filename.clone());
+
+      return format!("[{}]({filename})", link_text.trim());
+    }
+  }
+
   // Fall back to regular link handling if it has an href
   let text = get_element_text(element);
   if let Some(href) = get_attribute(element, "href") {
@@ -415,5 +429,23 @@ line 2]]></ac:plain-text-body>
       .unwrap();
     let output = convert_image_to_markdown(image);
     assert!(output.contains("![diagram](diagram.png)"));
+  }
+
+  #[test]
+  fn test_convert_attachment_link_to_markdown() {
+    let input = r#"
+      <ac:link>
+        <ri:attachment ri:filename="spec.pdf" />
+        <ac:plain-text-link-body>Download spec</ac:plain-text-link-body>
+      </ac:link>
+    "#;
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let link = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:link"))
+      .unwrap();
+    let output = convert_confluence_link_to_markdown(link);
+    assert_eq!(output, "[Download spec](spec.pdf)");
   }
 }
