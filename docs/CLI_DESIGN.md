@@ -57,8 +57,8 @@ confluence-dl 123456 --url https://eddieland.atlassian.net --children
 # Limit recursion depth
 confluence-dl https://eddieland.atlassian.net/wiki/pages/123456 --children --max-depth 2
 
-# Include attachments and comments
-confluence-dl https://eddieland.atlassian.net/wiki/pages/123456 --attachments --comments
+# Include attachments
+confluence-dl https://eddieland.atlassian.net/wiki/pages/123456 --attachments
 ```
 
 ### Page-Specific Options
@@ -70,8 +70,6 @@ confluence-dl https://eddieland.atlassian.net/wiki/pages/123456 --attachments --
                                [default: unlimited]
 
   --attachments                Download page attachments
-
-  --comments                   Include comments in export
 ```
 
 ## Debugging & Introspection Commands

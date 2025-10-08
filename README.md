@@ -62,14 +62,13 @@ confluence-dl 123456 --url https://your-domain.atlassian.net --children --max-de
 
 ### 💾 "I want a complete backup with attachments"
 
-Include everything - child pages, attachments, and comments:
+Include everything - child pages and attachments:
 
 ```bash
 confluence-dl 123456 \
   --url https://your-domain.atlassian.net \
   --children \
   --attachments \
-  --comments \
   -o ./backup
 ```
 
@@ -251,7 +250,6 @@ Remove the extracted files when you're done if you don't need them locally.
 - `--children`: Download child pages recursively
 - `--max-depth <N>`: Limit recursion depth
 - `--attachments`: Download page attachments
-- `--comments`: Include comments in export
 
 ### Output Control
 

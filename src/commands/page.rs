@@ -26,10 +26,6 @@ pub(crate) async fn handle_page_download(page_input: &str, cli: &Cli, colors: &C
     println!("  {} {}", colors.success("✓"), colors.info("Including attachments"));
   }
 
-  if cli.page.comments {
-    println!("  {} {}", colors.success("✓"), colors.info("Including comments"));
-  }
-
   if cli.behavior.dry_run {
     println!(
       "\n{} {}",

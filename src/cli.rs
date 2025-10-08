@@ -208,10 +208,6 @@ pub struct PageOptions {
   /// Download page attachments
   #[arg(long)]
   pub attachments: bool,
-
-  /// Include comments in export
-  #[arg(long)]
-  pub comments: bool,
 }
 
 /// Image and link options
@@ -339,7 +335,6 @@ mod tests {
         children: false,
         max_depth: None,
         attachments: false,
-        comments: false,
       },
       images_links: ImagesLinksOptions {
         download_images: true,
@@ -389,7 +384,6 @@ mod tests {
         children: false,
         max_depth: None,
         attachments: false,
-        comments: false,
       },
       images_links: ImagesLinksOptions {
         download_images: true,
@@ -439,7 +433,6 @@ mod tests {
         children: false,
         max_depth: Some(3),
         attachments: false,
-        comments: false,
       },
       images_links: ImagesLinksOptions {
         download_images: true,
@@ -485,7 +478,6 @@ mod tests {
         children: false,
         max_depth: None,
         attachments: false,
-        comments: false,
       },
       images_links: ImagesLinksOptions {
         download_images: true,
@@ -533,7 +525,6 @@ mod tests {
         children: false,
         max_depth: None,
         attachments: false,
-        comments: false,
       },
       images_links: ImagesLinksOptions {
         download_images: true,
@@ -578,7 +569,6 @@ mod tests {
         children: false,
         max_depth: None,
         attachments: false,
-        comments: false,
       },
       images_links: ImagesLinksOptions {
         download_images: true,
@@ -623,7 +613,6 @@ mod tests {
         children: true,
         max_depth: Some(3),
         attachments: false,
-        comments: false,
       },
       images_links: ImagesLinksOptions {
         download_images: true,
@@ -647,7 +636,7 @@ mod tests {
     // Create a CLI with a URL without a scheme
     use clap::Parser;
 
-    let cli = Cli::try_parse_from(&["confluence-dl", "--url", "example.atlassian.net", "auth", "test"]).unwrap();
+    let cli = Cli::try_parse_from(["confluence-dl", "--url", "example.atlassian.net", "auth", "test"]).unwrap();
 
     // URL should have https:// prepended
     assert_eq!(cli.auth.url, Some("https://example.atlassian.net".to_string()));
@@ -657,7 +646,7 @@ mod tests {
   fn test_url_normalization_preserves_https_scheme() {
     use clap::Parser;
 
-    let cli = Cli::try_parse_from(&[
+    let cli = Cli::try_parse_from([
       "confluence-dl",
       "--url",
       "https://example.atlassian.net",
@@ -674,7 +663,7 @@ mod tests {
   fn test_url_normalization_preserves_http_scheme() {
     use clap::Parser;
 
-    let cli = Cli::try_parse_from(&["confluence-dl", "--url", "http://localhost:8080", "auth", "test"]).unwrap();
+    let cli = Cli::try_parse_from(["confluence-dl", "--url", "http://localhost:8080", "auth", "test"]).unwrap();
 
     // URL should remain unchanged (http:// preserved for localhost testing)
     assert_eq!(cli.auth.url, Some("http://localhost:8080".to_string()));
@@ -691,7 +680,7 @@ mod tests {
       env::set_var("CONFLUENCE_URL", "mycompany.atlassian.net");
     }
 
-    let cli = Cli::try_parse_from(&["confluence-dl", "auth", "test"]).unwrap();
+    let cli = Cli::try_parse_from(["confluence-dl", "auth", "test"]).unwrap();
 
     // URL from environment should have https:// prepended
     assert_eq!(cli.auth.url, Some("https://mycompany.atlassian.net".to_string()));
