@@ -62,8 +62,9 @@ fn init_tracing(behavior: &cli::BehaviorOptions) {
     LevelFilter::ERROR
   } else {
     match behavior.verbose {
-      0 => LevelFilter::INFO,
-      1 => LevelFilter::DEBUG,
+      0 => LevelFilter::WARN,
+      1 => LevelFilter::INFO,
+      2 => LevelFilter::DEBUG,
       _ => LevelFilter::TRACE,
     }
   };

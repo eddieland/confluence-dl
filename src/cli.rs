@@ -173,7 +173,7 @@ pub struct BehaviorOptions {
   #[arg(long)]
   pub dry_run: bool,
 
-  /// Increase verbosity (-v, -vv, -vvv)
+  /// Increase verbosity (-v info, -vv debug, -vvv trace)
   #[arg(short, long, action = clap::ArgAction::Count)]
   pub verbose: u8,
 
