@@ -290,9 +290,16 @@ impl ConfluenceApi for ConfluenceClient {
       .send()
       .context("Failed to download attachment")?;
 
-    if !response.status().is_success() {
-      let status = response.status();
-      return Err(anyhow!("Failed to download attachment: {status}"));
+    let status = response.status();
+    if !status.is_success() {
+      let error_text = response.text().unwrap_or_else(|_| String::from("(no error details)"));
+      let attachment_name = output_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("<unknown attachment>");
+      return Err(anyhow!(
+        "Failed to download attachment '{attachment_name}' from {full_url}: {status} - {error_text}"
+      ));
     }
 
     // Create parent directory if it doesn't exist
