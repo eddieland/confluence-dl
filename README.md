@@ -119,9 +119,13 @@ Supported shells: bash, zsh, fish, powershell, elvish
 
 ## Authentication
 
-`confluence-dl` supports three authentication methods (in priority order):
+`confluence-dl` supports multiple authentication methods. Choose the one that best fits your security requirements and workflow.
 
-### 1. Command-line flags (highest priority)
+**Getting an API token**: Create one at [https://id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+
+### Command-line Flags
+
+Explicit credentials for testing or one-off exports:
 
 ```bash
 confluence-dl --url https://your-domain.atlassian.net \
@@ -130,7 +134,11 @@ confluence-dl --url https://your-domain.atlassian.net \
               123456
 ```
 
-### 2. Environment variables
+**Use when**: Testing authentication, one-time exports, or scripts where credentials are managed externally.
+
+### Environment Variables
+
+Common in CI/CD pipelines and containerized environments:
 
 ```bash
 export CONFLUENCE_URL=https://your-domain.atlassian.net
@@ -140,9 +148,13 @@ export CONFLUENCE_TOKEN=your-api-token
 confluence-dl 123456
 ```
 
-### 3. `.netrc` file (most convenient)
+**Use when**: Running in automated environments, containers, or CI/CD systems.
 
-Add to `~/.netrc`:
+### `.netrc` File
+
+Standard credential storage supported by many tools:
+
+Add to `~/.netrc` (Unix/macOS) or `~/_netrc` (Windows):
 
 ```netrc
 machine your-domain.atlassian.net
@@ -150,13 +162,35 @@ login your-email@example.com
 password your-api-token
 ```
 
-Then just use confluence-dl without auth flags:
+**Use when**: You want a persistent, tool-agnostic credential store. Remember to set appropriate permissions (`chmod 600 ~/.netrc` on Unix/macOS).
 
-```bash
-confluence-dl https://your-domain.atlassian.net/wiki/pages/123456
-```
+### Security Best Practices
 
-**Getting an API token**: Create one at [https://id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+- **Follow your organization's guidelines**: Consult your IT/security team for approved credential management practices
+- **Use the most secure option available**: If your environment supports credential managers or secret vaults, prefer those
+- **Protect your credentials**: Never commit API tokens to version control or share them publicly
+- **Rotate tokens regularly**: Set expiration dates and rotate API tokens according to your security policy
+- **Limit token scope**: Use the minimum required permissions for your API tokens
+
+### Credential Precedence
+
+When multiple methods are configured, `confluence-dl` checks them in this order:
+
+1. Command-line flags (`--user`, `--token`, `--url`)
+2. Environment variables (`CONFLUENCE_USER`, `CONFLUENCE_TOKEN`, `CONFLUENCE_URL`)
+3. `.netrc` file
+
+This allows you to override stored credentials for specific operations.
+
+### Future Authentication Methods
+
+We welcome contributions for additional authentication methods! Areas of interest:
+
+- **OS Keychain integration**: macOS Keychain, Windows Credential Manager, GNOME Keyring
+- **Secret manager support**: HashiCorp Vault, AWS Secrets Manager, Azure Key Vault
+- **SSO/OAuth flows**: Interactive authentication for organizations using SSO
+
+See our [contribution guidelines](CONTRIBUTING.md) if you'd like to help implement these features.
 
 ## Installation
 
