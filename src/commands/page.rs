@@ -1,8 +1,11 @@
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
 use std::{fs, process};
 
 use anyhow::Context;
+use futures::future::join_all;
+use tokio::sync::Semaphore;
 
 use crate::cli::Cli;
 use crate::color::ColorScheme;
@@ -107,8 +110,18 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
 
     // Download the entire tree
     println!("\n{} {}", colors.info("→"), colors.info("Downloading pages"));
+    if cli.behavior.verbose > 0 {
+      let parallel_label = cli.performance.parallel_label();
+      println!(
+        "  {}: {}",
+        colors.dimmed("Parallel limit"),
+        colors.number(parallel_label)
+      );
+    }
     let output_dir = Path::new(&cli.output.output);
-    download_page_tree(&client, &tree, output_dir, cli, colors).await?;
+    let parallel_limit = cli.performance.resolved_parallel();
+    let semaphore = Arc::new(Semaphore::new(parallel_limit));
+    download_page_tree(&client, &tree, output_dir, cli, colors, semaphore).await?;
 
     return Ok(());
   }
@@ -272,8 +285,15 @@ fn download_page_tree<'a>(
   output_dir: &'a Path,
   cli: &'a Cli,
   colors: &'a ColorScheme,
+  semaphore: Arc<Semaphore>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + 'a + Send>> {
   Box::pin(async move {
+    let permit = semaphore
+      .clone()
+      .acquire_owned()
+      .await
+      .map_err(|_| anyhow::anyhow!("Parallel download limiter became unavailable"))?;
+
     // Download the current page
     let page = &tree.page;
 
@@ -403,6 +423,9 @@ fn download_page_tree<'a>(
       // Raw XML was already saved before parsing (if requested)
     }
 
+    // Release permit before scheduling children so they can use the slot.
+    drop(permit);
+
     // Download child pages recursively
     if !tree.children.is_empty() {
       // Create subdirectory for children
@@ -410,8 +433,13 @@ fn download_page_tree<'a>(
       fs::create_dir_all(&child_dir)
         .with_context(|| format!("Failed to create directory for child pages at {}", child_dir.display()))?;
 
-      for child_tree in &tree.children {
-        download_page_tree(client, child_tree, &child_dir, cli, colors).await?;
+      let child_futures = tree
+        .children
+        .iter()
+        .map(|child_tree| download_page_tree(client, child_tree, &child_dir, cli, colors, Arc::clone(&semaphore)));
+
+      for result in join_all(child_futures).await {
+        result?;
       }
     }
 
@@ -439,4 +467,238 @@ fn sanitize_filename(title: &str) -> String {
     .replace("  ", " ")
     .trim()
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+  use std::collections::HashMap;
+  use std::path::PathBuf;
+  use std::sync::Arc;
+  use std::time::Duration;
+
+  use anyhow::{Result, bail};
+  use async_trait::async_trait;
+  use tempfile::tempdir;
+  use tokio::sync::Mutex;
+  use tokio::time::sleep;
+
+  use super::*;
+  use crate::cli::{
+    AuthOptions, BehaviorOptions, Cli, ColorOption, ImagesLinksOptions, OutputOptions, PageOptions, PerformanceOptions,
+  };
+  use crate::color::ColorScheme;
+  use crate::confluence::{
+    Attachment, AttachmentLinks, ConfluenceApi, Page, PageBody, PageTree, StorageFormat, UserInfo,
+  };
+
+  struct CountingClient {
+    attachments: HashMap<String, Vec<Attachment>>,
+    counter: Arc<Mutex<usize>>,
+    max_counter: Arc<Mutex<usize>>,
+    delay: Duration,
+  }
+
+  impl CountingClient {
+    fn new(counter: Arc<Mutex<usize>>, max_counter: Arc<Mutex<usize>>, delay: Duration) -> Self {
+      Self {
+        attachments: HashMap::new(),
+        counter,
+        max_counter,
+        delay,
+      }
+    }
+
+    fn set_attachments(&mut self, page_id: &str, attachments: Vec<Attachment>) {
+      self.attachments.insert(page_id.to_string(), attachments);
+    }
+  }
+
+  #[async_trait]
+  impl ConfluenceApi for CountingClient {
+    async fn get_page(&self, page_id: &str) -> Result<Page> {
+      bail!("get_page unexpectedly called for {}", page_id);
+    }
+
+    async fn get_child_pages(&self, _page_id: &str) -> Result<Vec<Page>> {
+      Ok(Vec::new())
+    }
+
+    async fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
+      Ok(self.attachments.get(page_id).cloned().unwrap_or_default())
+    }
+
+    async fn download_attachment(&self, _url: &str, output_path: &std::path::Path) -> Result<()> {
+      let current = {
+        let mut guard = self.counter.lock().await;
+        *guard += 1;
+        let current = *guard;
+        drop(guard);
+        current
+      };
+
+      {
+        let mut max_guard = self.max_counter.lock().await;
+        if current > *max_guard {
+          *max_guard = current;
+        }
+      }
+
+      let io_result = async {
+        sleep(self.delay).await;
+
+        if let Some(parent) = output_path.parent() {
+          tokio::fs::create_dir_all(parent).await?;
+        }
+
+        tokio::fs::write(output_path, b"test-data").await?;
+        Result::<()>::Ok(())
+      }
+      .await;
+
+      {
+        let mut guard = self.counter.lock().await;
+        *guard -= 1;
+      }
+
+      io_result
+    }
+
+    async fn test_auth(&self) -> Result<UserInfo> {
+      bail!("test_auth unexpectedly called");
+    }
+  }
+
+  fn make_page(id: &str, title: &str) -> Page {
+    Page {
+      id: id.to_string(),
+      title: title.to_string(),
+      page_type: "page".to_string(),
+      status: "current".to_string(),
+      body: Some(PageBody {
+        storage: Some(StorageFormat {
+          value: "<p>Example</p>".to_string(),
+          representation: "storage".to_string(),
+        }),
+        view: None,
+      }),
+      space: None,
+      links: None,
+    }
+  }
+
+  fn make_attachment(page_id: &str) -> Attachment {
+    Attachment {
+      id: format!("{page_id}-attachment"),
+      title: format!("{page_id}.dat"),
+      attachment_type: "attachment".to_string(),
+      media_type: Some("application/octet-stream".to_string()),
+      file_size: Some(12),
+      links: Some(AttachmentLinks {
+        download: Some(format!("https://example.com/{page_id}")),
+      }),
+    }
+  }
+
+  fn build_tree() -> PageTree {
+    let children: Vec<PageTree> = (0..4)
+      .map(|idx| {
+        let page_id = format!("child-{idx}");
+        PageTree {
+          page: make_page(&page_id, &format!("Child {}", idx)),
+          children: Vec::new(),
+          depth: 1,
+        }
+      })
+      .collect();
+
+    PageTree {
+      page: make_page("root", "Root Page"),
+      children,
+      depth: 0,
+    }
+  }
+
+  #[tokio::test]
+  async fn download_page_tree_respects_parallel_limit() {
+    let temp_dir = tempdir().unwrap();
+    let output_path = temp_dir.path();
+
+    let counter = Arc::new(Mutex::new(0));
+    let max_counter = Arc::new(Mutex::new(0));
+    let mut client = CountingClient::new(
+      Arc::clone(&counter),
+      Arc::clone(&max_counter),
+      Duration::from_millis(50),
+    );
+
+    let tree = build_tree();
+
+    let mut attachment_map_ids = vec!["root".to_string()];
+    attachment_map_ids.extend((0..4).map(|idx| format!("child-{idx}")));
+
+    for page_id in attachment_map_ids {
+      client.set_attachments(&page_id, vec![make_attachment(&page_id)]);
+    }
+
+    let client = client;
+    let colors = ColorScheme::new(ColorOption::Never);
+
+    let cli = Cli {
+      page_input: None,
+      command: None,
+      auth: AuthOptions {
+        url: None,
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: output_path.to_string_lossy().to_string(),
+        overwrite: true,
+        save_raw: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: true,
+        color: ColorOption::Never,
+      },
+      page: PageOptions {
+        children: true,
+        max_depth: None,
+        attachments: true,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: false,
+        images_dir: "images".to_string(),
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: 2,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let limit = cli.performance.resolved_parallel();
+    let semaphore = Arc::new(Semaphore::new(limit));
+    download_page_tree(&client, &tree, output_path, &cli, &colors, semaphore)
+      .await
+      .expect("download should succeed");
+
+    let max = *max_counter.lock().await;
+    assert!(max <= limit, "observed concurrency {max} exceeds limit {}", limit);
+
+    // Ensure files were written for each page.
+    let expected_files: Vec<PathBuf> = vec![
+      output_path.join("Root Page.md"),
+      output_path.join("Root Page").join("Child 0.md"),
+      output_path.join("Root Page").join("Child 1.md"),
+      output_path.join("Root Page").join("Child 2.md"),
+      output_path.join("Root Page").join("Child 3.md"),
+    ];
+
+    for file in expected_files {
+      assert!(file.exists(), "expected output file {} to exist", file.display());
+    }
+  }
 }

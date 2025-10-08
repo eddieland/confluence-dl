@@ -273,7 +273,7 @@ These options are available for all commands:
 ### Performance Options
 
 ```
-  --parallel <N>           Number of parallel downloads
+  --parallel <N>           Number of parallel downloads (-1 = available cores)
                            [default: 4]
 
   --rate-limit <N>         Max requests per second
