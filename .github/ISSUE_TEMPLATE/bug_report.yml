@@ -1,0 +1,80 @@
+name: "Bug report"
+description: "Report a reproducible problem with confluence-dl"
+title: "[Bug]: "
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve **confluence-dl**!
+        Please make sure you have searched existing issues before submitting a new report.
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before submitting.
+      options:
+        - label: I am using the latest `main` build or release of confluence-dl.
+          required: true
+        - label: I have searched the existing issues and discussions for duplicates.
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: Provide a clear, concise description of the issue.
+      placeholder: A brief summary of what went wrong...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the exact commands or steps that trigger the bug.
+      placeholder: |
+        1. Run `confluence-dl ...`
+        2. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste any CLI output, logs, or stack traces. Use fenced code blocks when possible.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: confluence-dl version
+      description: Output of `confluence-dl --version`.
+      placeholder: e.g. 0.1.0 (commit abc123)
+    validations:
+      required: true
+  - type: input
+    id: rust_version
+    attributes:
+      label: Rust toolchain version
+      description: Output of `rustc --version`.
+      placeholder: e.g. rustc 1.76.0
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system
+      description: Include OS name and version (e.g. macOS 14.4, Ubuntu 22.04, Windows 11).
+      placeholder: Your OS details
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      description: Anything else that would help us investigate.

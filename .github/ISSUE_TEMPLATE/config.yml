@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/eddieland/confluence-dl#readme
+    about: Review the README for usage instructions, roadmap details, and troubleshooting tips.
