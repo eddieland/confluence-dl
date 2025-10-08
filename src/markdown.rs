@@ -158,6 +158,7 @@ fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           "task-body" if matches_tag(child, "ac:task-body") => {
             result.push_str(&get_element_text(child));
           }
+          "placeholder" if matches_tag(child, "ac:placeholder") => {}
 
           "span" => {
             if let Some(emoji) = convert_span_emoji(child, verbose) {

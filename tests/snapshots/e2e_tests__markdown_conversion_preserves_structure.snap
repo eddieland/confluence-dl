@@ -53,8 +53,6 @@ javascriptfunction greet(name) { console.log(name); }
 
 ## Placeholders
 
-This is a placeholder for future content
-
 ## Time Elements
 
 Meeting date:
