@@ -216,6 +216,34 @@ cargo build --release
 
 The binary will be available at `target/release/confluence-dl`.
 
+### From GitHub Container Registry
+
+```bash
+docker pull ghcr.io/eddieland/confluence-dl:latest
+```
+
+The image is built from scratch and only contains the `confluence-dl` binary and its SHA-256 checksum. Run it just like the CLI:
+
+```bash
+docker run --rm \
+  -v "$(pwd)":/workspace \
+  -w /workspace \
+  ghcr.io/eddieland/confluence-dl:latest --help
+```
+
+To verify the checksum that ships with the image:
+
+```bash
+container_id=$(docker create ghcr.io/eddieland/confluence-dl:latest)
+docker cp "$container_id:/confluence-dl" ./confluence-dl
+docker cp "$container_id:/confluence-dl.sha256" ./confluence-dl.sha256
+docker rm "$container_id"
+sha256sum -c confluence-dl.sha256
+```
+
+The binary is located at `/confluence-dl` inside the container and is configured as the `ENTRYPOINT` for convenience.
+Remove the extracted files when you're done if you don't need them locally.
+
 ## Common Options
 
 ### Page-Specific
