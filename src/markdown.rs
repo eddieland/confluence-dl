@@ -296,7 +296,12 @@ fn convert_table_to_markdown(element: &scraper::ElementRef) -> String {
 
     // Get cells (th or td)
     for cell in tr.select(&Selector::parse("th, td").unwrap()) {
-      let text = get_element_text(&cell).trim().to_string();
+      let text = get_element_text(&cell)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string();
       cells.push(text);
     }
 
@@ -309,28 +314,62 @@ fn convert_table_to_markdown(element: &scraper::ElementRef) -> String {
     return String::new();
   }
 
+  let column_count = rows.iter().map(|row| row.len()).max().unwrap_or(0);
+  if column_count == 0 {
+    return String::new();
+  }
+
+  for row in &mut rows {
+    row.resize(column_count, String::new());
+  }
+
+  let mut column_widths = vec![0; column_count];
+  for row in &rows {
+    for (index, cell) in row.iter().enumerate() {
+      column_widths[index] = column_widths[index].max(cell.len());
+    }
+  }
+
   let mut result = String::new();
   result.push('\n');
 
+  fn format_row(row: &[String], column_widths: &[usize]) -> String {
+    let mut line = String::new();
+    line.push('|');
+
+    for (cell, width) in row.iter().zip(column_widths) {
+      line.push(' ');
+      line.push_str(cell);
+      if *width > cell.len() {
+        line.push_str(&" ".repeat(width - cell.len()));
+      }
+      line.push(' ');
+      line.push('|');
+    }
+
+    line.push('\n');
+    line
+  }
+
   // Write header row (or first row if no header)
   if let Some(first_row) = rows.first() {
-    result.push_str("| ");
-    result.push_str(&first_row.join(" | "));
-    result.push_str(" |\n");
+    result.push_str(&format_row(first_row, &column_widths));
 
-    // Write separator
+    // Write separator that matches the header width for prettier output
     result.push('|');
-    for _ in 0..first_row.len() {
-      result.push_str(" --- |");
+    for width in &column_widths {
+      let dash_count = (*width).max(3);
+      result.push(' ');
+      result.push_str(&"-".repeat(dash_count));
+      result.push(' ');
+      result.push('|');
     }
     result.push('\n');
   }
 
   // Write remaining rows
   for row in rows.iter().skip(1) {
-    result.push_str("| ");
-    result.push_str(&row.join(" | "));
-    result.push_str(" |\n");
+    result.push_str(&format_row(row, &column_widths));
   }
 
   result.push('\n');
@@ -450,8 +489,8 @@ mod tests {
     "#;
     let output = storage_to_markdown(input).unwrap();
     insta::assert_snapshot!(output, @r###"
-    | Header 1 | Header 2 |
-    | --- | --- |
+    | Header 1    | Header 2    |
+    | ----------- | ----------- |
     | Row 1 Col 1 | Row 1 Col 2 |
     | Row 2 Col 1 | Row 2 Col 2 |
     "###);
