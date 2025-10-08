@@ -9,31 +9,7 @@
 /// &quot; &apos;) so we need to convert HTML entities to literal characters or
 /// numeric references.
 pub fn preprocess_html_entities(text: &str) -> String {
-  text
-    .replace("&nbsp;", "\u{00A0}") // non-breaking space
-    .replace("&ndash;", "\u{2013}") // en dash
-    .replace("&mdash;", "\u{2014}") // em dash
-    .replace("&ldquo;", "\u{201C}") // left double quote
-    .replace("&rdquo;", "\u{201D}") // right double quote
-    .replace("&lsquo;", "\u{2018}") // left single quote
-    .replace("&rsquo;", "\u{2019}") // right single quote
-    .replace("&hellip;", "\u{2026}") // horizontal ellipsis
-    .replace("&bull;", "\u{2022}") // bullet
-    .replace("&middot;", "\u{00B7}") // middle dot
-    .replace("&deg;", "\u{00B0}") // degree sign
-    .replace("&copy;", "\u{00A9}") // copyright
-    .replace("&reg;", "\u{00AE}") // registered trademark
-    .replace("&trade;", "\u{2122}") // trademark
-    .replace("&times;", "\u{00D7}") // multiplication sign
-    .replace("&divide;", "\u{00F7}") // division sign
-    .replace("&plusmn;", "\u{00B1}") // plus-minus sign
-    .replace("&ne;", "\u{2260}") // not equal
-    .replace("&le;", "\u{2264}") // less than or equal
-    .replace("&ge;", "\u{2265}") // greater than or equal
-    .replace("&larr;", "\u{2190}") // leftwards arrow
-    .replace("&rarr;", "\u{2192}") // rightwards arrow
-    .replace("&uarr;", "\u{2191}") // upwards arrow
-    .replace("&darr;", "\u{2193}") // downwards arrow
+  replace_html_entities(text, PREPROCESS_ENTITIES, false)
 }
 
 /// Decode common HTML entities to their Unicode equivalents.
@@ -41,41 +17,33 @@ pub fn preprocess_html_entities(text: &str) -> String {
 /// This handles both named entities and numeric entities (decimal and
 /// hexadecimal).
 pub fn decode_html_entities(text: &str) -> String {
-  let replaced = text
-    .replace("&nbsp;", " ")
-    .replace("&rsquo;", "'")
-    .replace("&lsquo;", "'")
-    .replace("&rdquo;", "\"")
-    .replace("&ldquo;", "\"")
-    .replace("&mdash;", "—")
-    .replace("&ndash;", "–")
-    .replace("&amp;", "&")
-    .replace("&lt;", "<")
-    .replace("&gt;", ">")
-    .replace("&quot;", "\"")
-    .replace("&rarr;", "→")
-    .replace("&larr;", "←")
-    .replace("&#39;", "'");
-
-  decode_numeric_html_entities(&replaced)
+  replace_html_entities(text, DECODE_ENTITIES, true)
 }
 
-/// Decode numeric HTML entities so emoji references render properly.
-///
-/// Supports both decimal (`&#128075;`) and hexadecimal (`&#x1F44B;`) formats.
-fn decode_numeric_html_entities(text: &str) -> String {
+/// Replace named (and optionally numeric) HTML entities in a single pass.
+fn replace_html_entities(text: &str, entities: &[(&'static str, &'static str)], decode_numeric: bool) -> String {
+  if !text.contains('&') {
+    return text.to_owned();
+  }
+
   let mut result = String::with_capacity(text.len());
   let mut index = 0;
   let bytes = text.as_bytes();
 
   while index < text.len() {
-    if bytes[index] == b'&'
-      && let Some(semi_offset) = text[index..].find(';')
-    {
-      let end = index + semi_offset;
-      if let Some(decoded) = decode_numeric_entity(&text[index + 1..end]) {
-        result.push_str(&decoded);
-        index = end + 1;
+    if bytes[index] == b'&' {
+      if let Some((entity, replacement)) = match_named_entity(&text[index..], entities) {
+        result.push_str(replacement);
+        index += entity.len();
+        continue;
+      }
+
+      if decode_numeric
+        && let Some(semi_offset) = text[index..].find(';')
+        && let Some(decoded) = decode_numeric_entity(&text[index + 1..index + semi_offset])
+      {
+        result.push(decoded);
+        index += semi_offset + 1;
         continue;
       }
     }
@@ -88,8 +56,12 @@ fn decode_numeric_html_entities(text: &str) -> String {
   result
 }
 
+fn match_named_entity(text: &str, entities: &[(&'static str, &'static str)]) -> Option<(&'static str, &'static str)> {
+  entities.iter().find(|(entity, _)| text.starts_with(entity)).copied()
+}
+
 /// Decode a single numeric HTML entity (without the `&` and `;`).
-fn decode_numeric_entity(entity: &str) -> Option<String> {
+fn decode_numeric_entity(entity: &str) -> Option<char> {
   let body = entity.strip_prefix('#')?;
 
   let (radix, digits) = if let Some(hex) = body.strip_prefix('x').or_else(|| body.strip_prefix('X')) {
@@ -112,8 +84,52 @@ fn decode_numeric_entity(entity: &str) -> Option<String> {
 
   let value = u32::from_str_radix(digits, radix).ok()?;
   let ch = char::from_u32(value)?;
-  Some(ch.to_string())
+  Some(ch)
 }
+
+const PREPROCESS_ENTITIES: &[(&str, &str)] = &[
+  ("&nbsp;", "\u{00A0}"),   // non-breaking space
+  ("&ndash;", "\u{2013}"),  // en dash
+  ("&mdash;", "\u{2014}"),  // em dash
+  ("&ldquo;", "\u{201C}"),  // left double quote
+  ("&rdquo;", "\u{201D}"),  // right double quote
+  ("&lsquo;", "\u{2018}"),  // left single quote
+  ("&rsquo;", "\u{2019}"),  // right single quote
+  ("&hellip;", "\u{2026}"), // horizontal ellipsis
+  ("&bull;", "\u{2022}"),   // bullet
+  ("&middot;", "\u{00B7}"), // middle dot
+  ("&deg;", "\u{00B0}"),    // degree sign
+  ("&copy;", "\u{00A9}"),   // copyright
+  ("&reg;", "\u{00AE}"),    // registered trademark
+  ("&trade;", "\u{2122}"),  // trademark
+  ("&times;", "\u{00D7}"),  // multiplication sign
+  ("&divide;", "\u{00F7}"), // division sign
+  ("&plusmn;", "\u{00B1}"), // plus-minus sign
+  ("&ne;", "\u{2260}"),     // not equal
+  ("&le;", "\u{2264}"),     // less than or equal
+  ("&ge;", "\u{2265}"),     // greater than or equal
+  ("&larr;", "\u{2190}"),   // leftwards arrow
+  ("&rarr;", "\u{2192}"),   // rightwards arrow
+  ("&uarr;", "\u{2191}"),   // upwards arrow
+  ("&darr;", "\u{2193}"),   // downwards arrow
+];
+
+const DECODE_ENTITIES: &[(&str, &str)] = &[
+  ("&nbsp;", " "),
+  ("&rsquo;", "'"),
+  ("&lsquo;", "'"),
+  ("&rdquo;", "\""),
+  ("&ldquo;", "\""),
+  ("&mdash;", "—"),
+  ("&ndash;", "–"),
+  ("&amp;", "&"),
+  ("&lt;", "<"),
+  ("&gt;", ">"),
+  ("&quot;", "\""),
+  ("&rarr;", "→"),
+  ("&larr;", "←"),
+  ("&#39;", "'"),
+];
 
 #[cfg(test)]
 mod tests {
