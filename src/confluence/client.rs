@@ -1,7 +1,4 @@
-//! Confluence API client for fetching pages and content.
-//!
-//! This module provides a client for interacting with the Confluence REST API,
-//! including authentication, page fetching, and content retrieval.
+//! HTTP client implementation for talking to the Confluence REST API.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -11,32 +8,13 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
-use url::Url;
 
-/// Trait for Confluence API operations (enables testing with fake
-/// implementations)
-#[async_trait]
-pub trait ConfluenceApi: Send + Sync {
-  /// Fetch a page by ID
-  async fn get_page(&self, page_id: &str) -> Result<Page>;
+use super::api::ConfluenceApi;
+use super::models::{Attachment, AttachmentsResponse, ChildPagesResponse, Page, UserInfo};
 
-  /// Get child pages for a given page ID
-  async fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>>;
-
-  /// Get attachments for a page
-  async fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>>;
-
-  /// Download an attachment by URL to a file
-  async fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()>;
-
-  /// Test authentication and return user information
-  async fn test_auth(&self) -> Result<UserInfo>;
-}
-
-/// Confluence API client
+/// Confluence API client.
 #[derive(Clone)]
 pub struct ConfluenceClient {
   base_url: String,
@@ -55,6 +33,14 @@ struct RequestRateLimiter {
 }
 
 impl RequestRateLimiter {
+  /// Create a rate limiter with a fixed window.
+  ///
+  /// # Arguments
+  /// * `max_requests` - Maximum number of requests permitted within the window.
+  /// * `window` - Duration of the request window used to enforce throttling.
+  ///
+  /// # Returns
+  /// A rate limiter that enforces the configured throughput ceiling.
   fn new(max_requests: usize, window: Duration) -> Self {
     Self {
       max_requests,
@@ -63,6 +49,11 @@ impl RequestRateLimiter {
     }
   }
 
+  /// Wait until the caller can perform another request without exceeding the
+  /// rate limit.
+  ///
+  /// # Returns
+  /// Completes when the rate limiter has reserved a slot for a request.
   async fn acquire(&self) {
     loop {
       let mut timestamps = self.timestamps.lock().await;
@@ -96,122 +87,8 @@ impl RequestRateLimiter {
   }
 }
 
-/// Confluence page metadata and content
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Page {
-  pub id: String,
-  pub title: String,
-  #[serde(rename = "type")]
-  pub page_type: String,
-  pub status: String,
-  pub body: Option<PageBody>,
-  pub space: Option<PageSpace>,
-  #[serde(rename = "_links")]
-  pub links: Option<PageLinks>,
-}
-
-/// Page body content in various formats
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PageBody {
-  pub storage: Option<StorageFormat>,
-  pub view: Option<ViewFormat>,
-}
-
-/// Storage format (Confluence's internal format)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StorageFormat {
-  pub value: String,
-  pub representation: String,
-}
-
-/// View format (rendered HTML)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ViewFormat {
-  pub value: String,
-  pub representation: String,
-}
-
-/// Space information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PageSpace {
-  pub key: String,
-  pub name: String,
-  #[serde(rename = "type")]
-  pub space_type: String,
-}
-
-/// Page links
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PageLinks {
-  #[serde(rename = "webui")]
-  pub web_ui: Option<String>,
-  #[serde(rename = "self")]
-  pub self_link: Option<String>,
-}
-
-/// Attachment metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Attachment {
-  pub id: String,
-  pub title: String,
-  #[serde(rename = "type")]
-  pub attachment_type: String,
-  #[serde(rename = "mediaType")]
-  pub media_type: Option<String>,
-  #[serde(rename = "fileSize")]
-  pub file_size: Option<u64>,
-  #[serde(rename = "_links")]
-  pub links: Option<AttachmentLinks>,
-}
-
-/// Attachment links
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttachmentLinks {
-  pub download: Option<String>,
-}
-
-/// Attachments response wrapper
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttachmentsResponse {
-  pub results: Vec<Attachment>,
-}
-
-/// Child pages response wrapper
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChildPagesResponse {
-  pub results: Vec<Page>,
-}
-
-/// User information from authentication test
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserInfo {
-  #[serde(rename = "accountId")]
-  pub account_id: String,
-  pub email: Option<String>,
-  #[serde(rename = "displayName")]
-  pub display_name: String,
-  #[serde(rename = "publicName")]
-  pub public_name: Option<String>,
-}
-
-/// Represents a page tree with hierarchical children
-#[derive(Debug, Clone)]
-pub struct PageTree {
-  pub page: Page,
-  pub children: Vec<PageTree>,
-  pub depth: usize,
-}
-
-/// Information extracted from a Confluence URL
-#[derive(Debug, Clone)]
-pub struct UrlInfo {
-  pub base_url: String,
-  pub page_id: String,
-  pub space_key: Option<String>,
-}
-
 impl ConfluenceClient {
-  /// Create a new Confluence client
+  /// Create a new Confluence client.
   ///
   /// # Arguments
   /// * `base_url` - The base URL of the Confluence instance (e.g., https://example.atlassian.net)
@@ -219,6 +96,14 @@ impl ConfluenceClient {
   /// * `token` - The API token
   /// * `timeout_secs` - Request timeout in seconds
   /// * `rate_limit` - Maximum requests per second
+  ///
+  /// # Returns
+  /// A configured `ConfluenceClient` ready for API calls when the provided
+  /// options are valid.
+  ///
+  /// # Errors
+  /// Returns an error if the rate limit is zero or if the underlying
+  /// `reqwest::Client` cannot be built.
   pub fn new(
     base_url: impl Into<String>,
     username: impl Into<String>,
@@ -234,10 +119,8 @@ impl ConfluenceClient {
       return Err(anyhow!("Rate limit must be at least 1 request per second"));
     }
 
-    // Normalize base URL (remove trailing slash)
     let base_url = base_url.trim_end_matches('/').to_string();
 
-    // Create HTTP client with timeout
     let client = reqwest::Client::builder()
       .timeout(Duration::from_secs(timeout_secs))
       .user_agent(format!(
@@ -257,7 +140,11 @@ impl ConfluenceClient {
     })
   }
 
-  /// Get the authorization header value (Basic auth)
+  /// Get the authorization header value (Basic auth).
+  ///
+  /// # Returns
+  /// Encoded `Basic` authorization header string for the configured
+  /// credentials.
   fn auth_header(&self) -> String {
     let credentials = format!("{}:{}", self.username, self.token);
     format!("Basic {}", BASE64.encode(credentials.as_bytes()))
@@ -363,7 +250,6 @@ impl ConfluenceApi for ConfluenceClient {
   }
 
   async fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()> {
-    // Build full URL if it's a relative path
     let full_url = if url.starts_with("http://") || url.starts_with("https://") {
       url.to_string()
     } else {
@@ -395,14 +281,12 @@ impl ConfluenceApi for ConfluenceClient {
       ));
     }
 
-    // Create parent directory if it doesn't exist
     if let Some(parent) = output_path.parent() {
       tokio::fs::create_dir_all(parent)
         .await
         .context("Failed to create output directory for attachment")?;
     }
 
-    // Write response bytes to file
     let bytes = response.bytes().await.context("Failed to read attachment bytes")?;
     tokio::fs::write(output_path, bytes)
       .await
@@ -443,156 +327,11 @@ impl ConfluenceApi for ConfluenceClient {
   }
 }
 
-/// Parse a Confluence URL to extract page ID and other information
-///
-/// Supports various Confluence URL formats:
-/// - https://example.atlassian.net/wiki/spaces/SPACE/pages/123456/Page+Title
-/// - https://example.atlassian.net/wiki/pages/123456
-/// - https://example.atlassian.net/pages/123456
-pub fn parse_confluence_url(url: &str) -> Result<UrlInfo> {
-  let parsed = Url::parse(url).context("Invalid URL format")?;
-
-  // Extract base URL (scheme + host)
-  let base_url = format!(
-    "{}://{}",
-    parsed.scheme(),
-    parsed.host_str().context("URL missing host")?
-  );
-
-  // Extract path segments
-  let path = parsed.path();
-  let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-
-  // Look for "pages" segment followed by a numeric ID
-  let page_id_pos = segments
-    .iter()
-    .position(|&s| s == "pages")
-    .context("URL does not contain 'pages' segment")?;
-
-  if page_id_pos + 1 >= segments.len() {
-    return Err(anyhow!("URL does not contain page ID after 'pages' segment"));
-  }
-
-  let page_id = segments[page_id_pos + 1];
-
-  // Verify page ID is numeric
-  if !page_id.chars().all(|c| c.is_ascii_digit()) {
-    return Err(anyhow!("Page ID is not numeric: {page_id}"));
-  }
-
-  // Try to extract space key (appears between "spaces" and "pages")
-  let space_key = segments.iter().position(|&s| s == "spaces").and_then(|pos| {
-    if pos + 1 < segments.len() && pos + 1 < page_id_pos {
-      Some(segments[pos + 1].to_string())
-    } else {
-      None
-    }
-  });
-
-  Ok(UrlInfo {
-    base_url,
-    page_id: page_id.to_string(),
-    space_key,
-  })
-}
-
-/// Build a page tree recursively from a root page
-///
-/// This function traverses the page hierarchy starting from a root page,
-/// downloading child pages up to the specified maximum depth.
-///
-/// # Arguments
-/// * `client` - The Confluence API client
-/// * `page_id` - The root page ID to start from
-/// * `max_depth` - Maximum depth to traverse (None = unlimited)
-///
-/// # Returns
-/// A `PageTree` structure containing the page and all its children
-pub async fn get_page_tree(client: &dyn ConfluenceApi, page_id: &str, max_depth: Option<usize>) -> Result<PageTree> {
-  get_page_tree_recursive(client, page_id, 0, max_depth, &mut std::collections::HashSet::new()).await
-}
-
-/// Recursive helper for building page trees
-fn get_page_tree_recursive<'a>(
-  client: &'a dyn ConfluenceApi,
-  page_id: &'a str,
-  current_depth: usize,
-  max_depth: Option<usize>,
-  visited: &'a mut std::collections::HashSet<String>,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<PageTree>> + 'a + Send>> {
-  Box::pin(async move {
-    // Check for circular references
-    if visited.contains(page_id) {
-      return Err(anyhow!("Circular reference detected: page {page_id} already visited"));
-    }
-    visited.insert(page_id.to_string());
-
-    // Fetch the page
-    let page = client.get_page(page_id).await?;
-
-    // Check if we should fetch children
-    let children = if max_depth.is_none() || current_depth < max_depth.unwrap() {
-      let child_pages = client.get_child_pages(page_id).await?;
-      let mut child_trees = Vec::new();
-
-      for child_page in child_pages {
-        match get_page_tree_recursive(client, &child_page.id, current_depth + 1, max_depth, visited).await {
-          Ok(child_tree) => child_trees.push(child_tree),
-          Err(e) => {
-            // Log the error but continue with other children
-            eprintln!("Warning: Failed to fetch child page {}: {}", child_page.id, e);
-          }
-        }
-      }
-
-      child_trees
-    } else {
-      Vec::new()
-    };
-
-    Ok(PageTree {
-      page,
-      children,
-      depth: current_depth,
-    })
-  })
-}
-
 #[cfg(test)]
 mod tests {
+  use base64::Engine as _;
+
   use super::*;
-
-  #[test]
-  fn test_parse_confluence_url_with_space() {
-    let url = "https://eddieland.atlassian.net/wiki/spaces/~6320c26429083bbe8cc369b0/pages/229483/Getting+started+in+Confluence+from+Jira";
-    let info = parse_confluence_url(url).unwrap();
-
-    assert_eq!(info.base_url, "https://eddieland.atlassian.net");
-    assert_eq!(info.page_id, "229483");
-    assert_eq!(info.space_key, Some("~6320c26429083bbe8cc369b0".to_string()));
-  }
-
-  #[test]
-  fn test_parse_confluence_url_without_space() {
-    let url = "https://example.atlassian.net/wiki/pages/123456";
-    let info = parse_confluence_url(url).unwrap();
-
-    assert_eq!(info.base_url, "https://example.atlassian.net");
-    assert_eq!(info.page_id, "123456");
-    assert_eq!(info.space_key, None);
-  }
-
-  #[test]
-  fn test_parse_confluence_url_invalid() {
-    let url = "https://example.com/not-a-confluence-url";
-    assert!(parse_confluence_url(url).is_err());
-  }
-
-  #[test]
-  fn test_parse_confluence_url_non_numeric_id() {
-    let url = "https://example.atlassian.net/wiki/pages/notanumber";
-    assert!(parse_confluence_url(url).is_err());
-  }
 
   #[test]
   fn test_confluence_client_new() {
@@ -625,39 +364,10 @@ mod tests {
     let auth_header = client.auth_header();
     assert!(auth_header.starts_with("Basic "));
 
-    // Decode and verify the Base64 encoded credentials
     let encoded = auth_header.strip_prefix("Basic ").unwrap();
     let decoded = BASE64.decode(encoded.as_bytes()).unwrap();
     let decoded_str = String::from_utf8(decoded).unwrap();
     assert_eq!(decoded_str, "user@example.com:test-token");
-  }
-
-  #[test]
-  fn test_parse_confluence_url_missing_pages_segment() {
-    let url = "https://example.atlassian.net/wiki/spaces/SPACE/123456";
-    assert!(parse_confluence_url(url).is_err());
-  }
-
-  #[test]
-  fn test_parse_confluence_url_pages_at_end() {
-    let url = "https://example.atlassian.net/wiki/pages";
-    let result = parse_confluence_url(url);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("does not contain page ID"));
-  }
-
-  #[test]
-  fn test_parse_confluence_url_invalid_scheme() {
-    let url = "not-a-url";
-    assert!(parse_confluence_url(url).is_err());
-  }
-
-  #[test]
-  fn test_parse_confluence_url_no_host() {
-    let url = "file:///wiki/pages/123";
-    let result = parse_confluence_url(url);
-    // This should error because file:// scheme doesn't have a host
-    assert!(result.is_err());
   }
 
   #[test]
