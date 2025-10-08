@@ -194,14 +194,20 @@ confluence-dl completions <SHELL>
 **Examples:**
 
 ```bash
-# Generate bash completions
-confluence-dl completions bash > /etc/bash_completion.d/confluence-dl
+# Bash (user-level, no sudo required - recommended)
+mkdir -p ~/.local/share/bash-completion/completions
+confluence-dl completions bash > ~/.local/share/bash-completion/completions/confluence-dl
 
-# Generate zsh completions
+# Bash (system-level, requires sudo)
+confluence-dl completions bash | sudo tee /usr/share/bash-completion/completions/confluence-dl
+
+# Zsh
+mkdir -p ~/.zsh/completions
 confluence-dl completions zsh > ~/.zsh/completions/_confluence-dl
 
-# Direct install (bash)
-confluence-dl completions bash | sudo tee /usr/share/bash-completion/completions/confluence-dl
+# Fish
+mkdir -p ~/.config/fish/completions
+confluence-dl completions fish > ~/.config/fish/completions/confluence-dl.fish
 ```
 
 ## Global Options

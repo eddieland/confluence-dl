@@ -107,8 +107,9 @@ confluence-dl 123456 \
 Generate completion scripts for your shell:
 
 ```bash
-# Bash
-confluence-dl completions bash > /etc/bash_completion.d/confluence-dl
+# Bash (user-level, no sudo required)
+mkdir -p ~/.local/share/bash-completion/completions
+confluence-dl completions bash > ~/.local/share/bash-completion/completions/confluence-dl
 
 # Zsh
 confluence-dl completions zsh > ~/.zsh/completions/_confluence-dl
