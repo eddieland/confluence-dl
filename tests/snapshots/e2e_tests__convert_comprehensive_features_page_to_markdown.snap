@@ -46,7 +46,10 @@ Assigned to @user:6320c26429083bbe8cc369b0 for review.
 
 ## Code Blocks
 
-javascriptfunction greet(name) { console.log(name); }
+```javascript
+function greet(name) { console.log(name); }
+```
+
 ## Images
 
 ![image]()
