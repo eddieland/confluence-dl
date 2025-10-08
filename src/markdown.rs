@@ -624,7 +624,24 @@ fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
 fn convert_table_to_markdown(element: Node) -> String {
   let mut rows: Vec<Vec<String>> = Vec::new();
 
-  for tr in element.children().filter(|child| matches_tag(*child, "tr")) {
+  // Collect all <tr> elements from the table
+  // In HTML tables, rows are typically wrapped in <tbody>, <thead>, or <tfoot>
+  let mut tr_elements = Vec::new();
+
+  // Check for direct <tr> children (edge case) or table section elements
+  for child in element.children() {
+    if matches_tag(child, "tr") {
+      tr_elements.push(child);
+    } else if matches_tag(child, "tbody") || matches_tag(child, "thead") || matches_tag(child, "tfoot") {
+      // Collect <tr> elements from table sections
+      for tr in child.children().filter(|n| matches_tag(*n, "tr")) {
+        tr_elements.push(tr);
+      }
+    }
+  }
+
+  // Process all collected rows
+  for tr in tr_elements {
     let mut cells: Vec<String> = Vec::new();
 
     for cell in tr
@@ -948,15 +965,9 @@ mod tests {
         <li>Second</li>
       </ol>
     "#;
-    let output = storage_to_markdown(input, 0).unwrap();
-    insta::assert_snapshot!(output, @r"
-    - Item 1
-    - Item 2
-
-          
-    1. First
-    2. Second
-    ");
+    let result = storage_to_markdown(input, 0).unwrap();
+    let output = result.escape_default();
+    insta::assert_snapshot!(output, @r"- Item 1\n- Item 2\n\n      \n1. First\n2. Second\n");
   }
 
   #[test]
