@@ -138,6 +138,16 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           }
           "placeholder" if matches_tag(child, "ac:placeholder") => {}
 
+          // Time elements - prefer visible text, fall back to datetime attribute
+          "time" => {
+            let text = get_element_text(child);
+            if !text.trim().is_empty() {
+              result.push_str(&text);
+            } else if let Some(datetime) = get_attribute(child, "datetime") {
+              result.push_str(&datetime);
+            }
+          }
+
           // Span elements (check for emoji metadata)
           "span" => {
             if let Some(emoji) = convert_span_emoji(child, verbose) {
@@ -215,6 +225,20 @@ mod tests {
     let input = r#"<a href="https://example.com">Example</a>"#;
     let output = convert_to_markdown(input, 0);
     assert!(output.contains("[Example](https://example.com)"));
+  }
+
+  #[test]
+  fn test_convert_time_with_text_content() {
+    let input = "<p>Meeting at <time datetime=\"2025-10-07\">October 7, 2025</time></p>";
+    let output = convert_to_markdown(input, 0);
+    assert!(output.contains("Meeting at October 7, 2025"));
+  }
+
+  #[test]
+  fn test_convert_time_with_datetime_attribute() {
+    let input = "<p>Meeting at <time datetime=\"2025-10-07\" /></p>";
+    let output = convert_to_markdown(input, 0);
+    assert!(output.contains("Meeting at 2025-10-07"));
   }
 
   #[test]
