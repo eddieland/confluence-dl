@@ -152,6 +152,10 @@ pub struct OutputOptions {
   /// Overwrite existing files
   #[arg(long)]
   pub overwrite: bool,
+
+  /// Save raw Confluence storage format alongside Markdown
+  #[arg(long)]
+  pub save_raw: bool,
 }
 
 /// Output format options
@@ -319,6 +323,7 @@ mod tests {
         output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
+        save_raw: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -368,6 +373,7 @@ mod tests {
         output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
+        save_raw: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -417,6 +423,7 @@ mod tests {
         output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
+        save_raw: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -462,6 +469,7 @@ mod tests {
         output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
+        save_raw: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -509,6 +517,7 @@ mod tests {
         output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
+        save_raw: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -553,6 +562,7 @@ mod tests {
         output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
+        save_raw: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -597,6 +607,7 @@ mod tests {
         output: "./output".to_string(),
         format: OutputFormat::Markdown,
         overwrite: false,
+        save_raw: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,

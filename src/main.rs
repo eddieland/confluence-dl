@@ -468,11 +468,25 @@ fn download_page_tree(
       fs::create_dir_all(parent)?;
     }
 
-    // Write to file
+    // Write markdown to file
     fs::write(&output_path, markdown)?;
 
     if !cli.behavior.quiet {
       println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
+    }
+
+    // Save raw Confluence storage format if requested
+    if cli.output.save_raw {
+      let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
+      fs::write(&raw_output_path, storage_content)?;
+
+      if cli.behavior.verbose > 0 {
+        println!(
+          "    {} {}",
+          colors.dimmed("→"),
+          colors.dimmed(format!("Raw: {}", raw_output_path.display()))
+        );
+      }
     }
   }
 
