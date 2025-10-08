@@ -9,8 +9,8 @@ use tracing::debug;
 use super::emoji::{convert_emoji_to_markdown, convert_span_emoji};
 use super::html_entities::decode_html_entities;
 use super::macros::{
-  convert_confluence_link_to_markdown, convert_image_to_markdown, convert_macro_to_markdown,
-  convert_task_list_to_markdown,
+  convert_adf_extension_to_markdown, convert_confluence_link_to_markdown, convert_image_to_markdown,
+  convert_macro_to_markdown, convert_task_list_to_markdown,
 };
 use super::tables::convert_table_to_markdown;
 use super::utils::{get_attribute, get_element_text, matches_tag};
@@ -177,6 +177,9 @@ pub fn convert_node_to_markdown(node: Node) -> String {
           }
           "image" if matches_tag(child, "ac:image") => {
             result.push_str(&convert_image_to_markdown(child));
+          }
+          "adf-extension" if matches_tag(child, "ac:adf-extension") => {
+            result.push_str(&convert_adf_extension_to_markdown(child, &convert_node_to_markdown));
           }
 
           // Layout elements (just extract content)
@@ -362,5 +365,69 @@ mod tests {
     let input = "<p>Use <code>git commit</code> to save</p>";
     let output = convert_to_markdown(input);
     assert!(output.contains("`git commit`"));
+  }
+
+  #[test]
+  fn test_convert_adf_decision_list_placeholder_is_ignored() {
+    let input = r#"
+      <ac:adf-extension>
+        <ac:adf-node type="decision-list">
+          <ac:adf-attribute key="local-id">5a86a7de</ac:adf-attribute>
+          <ac:adf-node type="decision-item">
+            <ac:adf-attribute key="local-id">51a042d6</ac:adf-attribute>
+            <ac:adf-attribute key="state">DECIDED</ac:adf-attribute>
+          </ac:adf-node>
+        </ac:adf-node>
+      </ac:adf-extension>
+  "#;
+
+    let output = convert_to_markdown(input);
+    assert!(output.trim().is_empty());
+  }
+
+  #[test]
+  fn test_convert_adf_decision_list_with_content() {
+    let input = r#"
+      <ac:adf-extension>
+        <ac:adf-node type="decision-list">
+          <ac:adf-node type="decision-item">
+            <ac:adf-attribute key="state">DECIDED</ac:adf-attribute>
+            <ac:adf-attribute key="owner">Alice</ac:adf-attribute>
+            <ac:adf-node type="paragraph">
+              <ac:adf-leaf type="text">
+                <ac:adf-attribute key="text">Adopt Rust for CLI tooling</ac:adf-attribute>
+              </ac:adf-leaf>
+            </ac:adf-node>
+            <ac:adf-node type="paragraph">
+              <ac:adf-leaf type="text">
+                <ac:adf-attribute key="text">Roll out to all teams in Q3.</ac:adf-attribute>
+              </ac:adf-leaf>
+            </ac:adf-node>
+          </ac:adf-node>
+        </ac:adf-node>
+      </ac:adf-extension>
+    "#;
+
+    let output = convert_to_markdown(input);
+    assert!(output.contains("- **Decision:** Adopt Rust for CLI tooling"));
+    assert!(output.contains("Status: DECIDED"));
+    assert!(output.contains("Owner: Alice"));
+    assert!(output.contains("Roll out to all teams in Q3."));
+  }
+
+  #[test]
+  fn test_convert_adf_decision_list_with_plain_content() {
+    let input = r#"
+      <ac:adf-extension>
+        <ac:adf-node type="decision-list">
+          <ac:adf-node type="decision-item">
+            <ac:adf-content>Hotel? Trivago</ac:adf-content>
+          </ac:adf-node>
+        </ac:adf-node>
+      </ac:adf-extension>
+    "#;
+
+    let output = convert_to_markdown(input);
+    assert!(output.contains("- **Decision:** Hotel? Trivago"));
   }
 }
