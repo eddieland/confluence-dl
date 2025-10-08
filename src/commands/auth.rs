@@ -46,7 +46,13 @@ pub(crate) async fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, col
       println!("  {}: {}", colors.emphasis("Username"), username);
 
       // Create client
-      let client = match confluence::ConfluenceClient::new(base_url, &username, &token, cli.performance.timeout) {
+      let client = match confluence::ConfluenceClient::new(
+        base_url,
+        &username,
+        &token,
+        cli.performance.timeout,
+        cli.performance.rate_limit,
+      ) {
         Ok(c) => c,
         Err(e) => {
           eprintln!(
