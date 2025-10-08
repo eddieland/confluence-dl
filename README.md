@@ -6,6 +6,8 @@ A fast, intuitive CLI tool for exporting Confluence pages to Markdown.
 
 `confluence-dl` is a Rust-powered command-line utility that downloads Confluence pages and converts them to clean Markdown. Whether you need to backup documentation, migrate to a static site generator, or work offline, confluence-dl makes it simple.
 
+**For AI Code Assistants**: Local Confluence docs enable GitHub Copilot, Cursor, and Cline to reference your documentation directly in your workspace without a complicated RAG pipeline.
+
 **Current Status**: v0.1 - Core functionality for page-based exports
 
 ## Quick Start
