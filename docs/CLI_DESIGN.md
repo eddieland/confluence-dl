@@ -266,9 +266,6 @@ These options are available for all commands:
   --images-dir <DIR>       Directory for images (relative to output)
                            [default: images]
 
-  --convert-links          Convert Confluence links to markdown
-                           [default: true]
-
   --preserve-anchors       Keep Confluence anchor IDs
                            [default: false]
 ```

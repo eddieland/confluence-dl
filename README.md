@@ -266,7 +266,6 @@ Remove the extracted files when you're done if you don't need them locally.
 
 - `--download-images`: Download embedded images (default: true)
 - `--images-dir <DIR>`: Directory for images (default: images)
-- `--convert-links`: Convert Confluence links to markdown (default: true)
 
 ### Performance
 

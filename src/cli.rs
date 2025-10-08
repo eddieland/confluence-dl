@@ -209,10 +209,6 @@ pub struct ImagesLinksOptions {
   #[arg(long, default_value = "images", value_name = "DIR")]
   pub images_dir: String,
 
-  /// Convert Confluence links to markdown
-  #[arg(long, default_value = "true", action = clap::ArgAction::Set)]
-  pub convert_links: bool,
-
   /// Keep Confluence anchor IDs
   #[arg(long)]
   pub preserve_anchors: bool,
@@ -326,7 +322,6 @@ mod tests {
       images_links: ImagesLinksOptions {
         download_images: true,
         images_dir: "images".to_string(),
-        convert_links: true,
         preserve_anchors: false,
       },
       performance: PerformanceOptions {
@@ -374,7 +369,6 @@ mod tests {
       images_links: ImagesLinksOptions {
         download_images: true,
         images_dir: "images".to_string(),
-        convert_links: true,
         preserve_anchors: false,
       },
       performance: PerformanceOptions {
@@ -422,7 +416,6 @@ mod tests {
       images_links: ImagesLinksOptions {
         download_images: true,
         images_dir: "images".to_string(),
-        convert_links: true,
         preserve_anchors: false,
       },
       performance: PerformanceOptions {
@@ -466,7 +459,6 @@ mod tests {
       images_links: ImagesLinksOptions {
         download_images: true,
         images_dir: "images".to_string(),
-        convert_links: true,
         preserve_anchors: false,
       },
       performance: PerformanceOptions {
@@ -512,7 +504,6 @@ mod tests {
       images_links: ImagesLinksOptions {
         download_images: true,
         images_dir: "images".to_string(),
-        convert_links: true,
         preserve_anchors: false,
       },
       performance: PerformanceOptions {
@@ -555,7 +546,6 @@ mod tests {
       images_links: ImagesLinksOptions {
         download_images: true,
         images_dir: "images".to_string(),
-        convert_links: true,
         preserve_anchors: false,
       },
       performance: PerformanceOptions {
@@ -598,7 +588,6 @@ mod tests {
       images_links: ImagesLinksOptions {
         download_images: true,
         images_dir: "images".to_string(),
-        convert_links: true,
         preserve_anchors: false,
       },
       performance: PerformanceOptions {
