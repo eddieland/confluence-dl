@@ -10,7 +10,16 @@ use roxmltree::Node;
 /// Synthetic namespace base URL for Confluence namespaces.
 pub const SYNTHETIC_NS_BASE: &str = "https://confluence.example/";
 
-/// Get all text content from an element and its children.
+/// Collects all decoded text content from an element and its descendants.
+///
+/// Recursively walks the node tree so that nested inline markup is flattened
+/// into a single string that can be emitted as Markdown.
+///
+/// # Arguments
+/// * `node` - The starting element to collect text from.
+///
+/// # Returns
+/// A `String` containing all text nodes with HTML entities decoded.
 pub fn get_element_text(node: Node) -> String {
   let mut text = String::new();
 
@@ -31,7 +40,16 @@ pub fn get_element_text(node: Node) -> String {
   text
 }
 
-/// Split a qualified tag name into prefix and local name.
+/// Splits a qualified tag name into its namespace prefix and local name.
+///
+/// Names without a colon return `None` for the prefix.
+///
+/// # Arguments
+/// * `name` - The tag or attribute name such as `ac:rich-text-body`.
+///
+/// # Returns
+/// A tuple of `(prefix, local_name)` where `prefix` is `None` when the value
+/// is not namespaced.
 pub fn split_qualified_name(name: &str) -> (Option<&str>, &str) {
   if let Some((prefix, local)) = name.split_once(':') {
     (Some(prefix), local)
@@ -40,10 +58,18 @@ pub fn split_qualified_name(name: &str) -> (Option<&str>, &str) {
   }
 }
 
-/// Wrap content with synthetic namespace declarations.
+/// Wraps storage format markup with synthetic namespace declarations.
 ///
-/// This allows roxmltree to parse Confluence-specific namespaces
-/// like `ac:`, `ri:` without them being declared in the XML.
+/// Confluence storage format frequently references namespaces such as `ac:`
+/// or `ri:` without declaring them. The wrapper element allows `roxmltree`
+/// to resolve those prefixes during parsing.
+///
+/// # Arguments
+/// * `storage_content` - Raw storage format XML/HTML snippet from Confluence.
+///
+/// # Returns
+/// A `String` containing the original content nested inside a synthetic root
+/// element with namespace declarations.
 pub fn wrap_with_namespaces(storage_content: &str) -> String {
   let mut prefixes = BTreeSet::new();
 
@@ -98,7 +124,14 @@ fn is_valid_prefix(prefix: &str) -> bool {
     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// Get the qualified tag name of a node (including namespace).
+/// Builds the fully qualified tag name of a node, including namespace prefix.
+///
+/// # Arguments
+/// * `node` - The XML node whose name should be normalized.
+///
+/// # Returns
+/// A `String` in the form `ns:name` when the node has a namespace or just the
+/// local name when it does not.
 pub fn qualified_tag_name(node: Node) -> String {
   let tag = node.tag_name();
   let name = tag.name();
@@ -109,7 +142,16 @@ pub fn qualified_tag_name(node: Node) -> String {
   }
 }
 
-/// Check if a node matches a specific tag name (with optional namespace).
+/// Tests whether a node matches an expected tag name with optional namespace.
+///
+/// # Arguments
+/// * `node` - The element to check.
+/// * `name` - The expected tag name, optionally including a prefix such as
+///   `ac:rich-text-body`.
+///
+/// # Returns
+/// `true` when the element matches the supplied name and namespace, otherwise
+/// `false`.
 pub fn matches_tag(node: Node, name: &str) -> bool {
   if !node.is_element() {
     return false;
@@ -130,7 +172,16 @@ pub fn matches_tag(node: Node, name: &str) -> bool {
   }
 }
 
-/// Get an attribute value from a node (with optional namespace).
+/// Retrieves an attribute value from a node, handling namespaced attributes.
+///
+/// # Arguments
+/// * `node` - The element to inspect.
+/// * `attr_name` - The attribute to retrieve, optionally namespaced like
+///   `ri:filename`.
+///
+/// # Returns
+/// `Some(String)` containing the attribute value when present, otherwise
+/// `None`.
 pub fn get_attribute(node: Node, attr_name: &str) -> Option<String> {
   if !node.is_element() {
     return None;
@@ -157,12 +208,31 @@ pub fn get_attribute(node: Node, attr_name: &str) -> Option<String> {
   None
 }
 
-/// Find a child element by tag name (handles namespaced tags).
+/// Finds the first child element with a given tag name.
+///
+/// This helper understands the synthetic namespaces injected by
+/// [`wrap_with_namespaces`].
+///
+/// # Arguments
+/// * `node` - The parent element whose children should be searched.
+/// * `tag_name` - The qualified tag name to look for, e.g. `ac:rich-text-body`.
+///
+/// # Returns
+/// `Some(Node)` when a matching child exists, or `None` if none are found.
 pub fn find_child_by_tag<'a, 'input>(node: Node<'a, 'input>, tag_name: &str) -> Option<Node<'a, 'input>> {
   node.children().find(|child| matches_tag(*child, tag_name))
 }
 
-/// Find a child element by tag name and attribute value.
+/// Finds a child element that matches both a tag name and attribute value.
+///
+/// # Arguments
+/// * `node` - The parent element whose children should be inspected.
+/// * `tag_name` - The qualified tag name to match against.
+/// * `attr_name` - The attribute name to compare, optionally namespaced.
+/// * `attr_value` - The expected attribute value.
+///
+/// # Returns
+/// `Some(Node)` when a matching child exists, or `None` if nothing matches.
 pub fn find_child_by_tag_and_attr<'a, 'input>(
   node: Node<'a, 'input>,
   tag_name: &str,
