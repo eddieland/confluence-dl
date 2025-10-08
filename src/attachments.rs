@@ -58,7 +58,7 @@ pub async fn download_attachments(
   let mut downloaded = Vec::new();
   let mut used_filenames = HashSet::new();
 
-  for attachment in attachments {
+  'attachment_loop: for attachment in attachments {
     if should_skip(&attachment, skip_titles) {
       continue;
     }
@@ -74,25 +74,45 @@ pub async fn download_attachments(
       }
     };
 
-    let unique_filename = generate_unique_filename(&attachment.title, &attachments_dir, &mut used_filenames);
-    let output_path = attachments_dir.join(&unique_filename);
+    let attachment_title = attachment.title.clone();
 
-    if output_path.exists() && !overwrite {
-      downloaded.push(DownloadedAttachment {
-        original_name: attachment.title.clone(),
-        relative_path: PathBuf::from(ATTACHMENTS_DIR).join(&unique_filename),
-      });
-      continue;
+    let sanitized = sanitize_filename(&attachment_title);
+    let (base, ext) = split_name_and_extension(&sanitized);
+    let mut filename = sanitized.clone();
+    let mut counter = 1;
+
+    loop {
+      let output_path = attachments_dir.join(&filename);
+
+      if used_filenames.contains(&filename) {
+        filename = next_candidate(&base, &ext, counter);
+        counter += 1;
+        continue;
+      }
+
+      if output_path.exists() && !overwrite {
+        used_filenames.insert(filename.clone());
+        downloaded.push(DownloadedAttachment {
+          original_name: attachment_title.clone(),
+          relative_path: PathBuf::from(ATTACHMENTS_DIR).join(&filename),
+        });
+        continue 'attachment_loop;
+      }
+
+      used_filenames.insert(filename.clone());
+      break;
     }
+
+    let output_path = attachments_dir.join(&filename);
 
     client
       .download_attachment(download_url, &output_path)
       .await
-      .with_context(|| format!("Failed to download attachment {}", attachment.title))?;
+      .with_context(|| format!("Failed to download attachment {}", attachment_title.clone()))?;
 
     downloaded.push(DownloadedAttachment {
-      original_name: attachment.title,
-      relative_path: PathBuf::from(ATTACHMENTS_DIR).join(unique_filename),
+      original_name: attachment_title,
+      relative_path: PathBuf::from(ATTACHMENTS_DIR).join(filename),
     });
   }
 
@@ -127,22 +147,12 @@ fn should_skip(attachment: &Attachment, skip_titles: Option<&HashSet<String>>) -
   }
 }
 
-fn generate_unique_filename(name: &str, target_dir: &Path, used_filenames: &mut HashSet<String>) -> String {
-  let mut candidate = sanitize_filename(name);
-  let (base, ext) = split_name_and_extension(&candidate);
-  let mut counter = 1;
-
-  while used_filenames.contains(&candidate) || target_dir.join(&candidate).exists() {
-    candidate = if ext.is_empty() {
-      format!("{base}-{counter}")
-    } else {
-      format!("{base}-{counter}.{ext}")
-    };
-    counter += 1;
+fn next_candidate(base: &str, ext: &str, counter: usize) -> String {
+  if ext.is_empty() {
+    format!("{base}-{counter}")
+  } else {
+    format!("{base}-{counter}.{ext}")
   }
-
-  used_filenames.insert(candidate.clone());
-  candidate
 }
 
 fn split_name_and_extension(name: &str) -> (String, String) {

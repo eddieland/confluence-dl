@@ -359,6 +359,21 @@ async fn test_attachment_download_workflow() {
     markdown.contains("](attachments/project-plan.pdf)"),
     "Markdown should reference the local attachment path: {markdown}"
   );
+
+  let second_download = attachments::download_attachments(&client, "654321", output_path, false, None)
+    .await
+    .unwrap();
+
+  assert_eq!(second_download.len(), 1);
+  assert_eq!(second_download[0].relative_path, downloaded[0].relative_path);
+
+  let attachment_dir = output_path.join(attachments::ATTACHMENTS_DIR);
+  let file_count = std::fs::read_dir(&attachment_dir).map(|iter| iter.count()).unwrap_or(0);
+  assert_eq!(
+    file_count, 1,
+    "Expected a single attachment file without duplicates in {:?}",
+    attachment_dir
+  );
 }
 
 #[tokio::test]
