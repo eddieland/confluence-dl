@@ -1,6 +1,5 @@
 ---
 source: tests/e2e_tests.rs
-assertion_line: 672
 expression: markdown
 ---
 # Comprehensive Test Page
@@ -53,7 +52,7 @@ function greet(name) { console.log(name); }
 
 ## Images
 
-![image]()
+![image](diagram.png)
 
 ## Placeholders
 
