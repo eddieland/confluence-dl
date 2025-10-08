@@ -3,13 +3,17 @@
 //! This module provides a client for interacting with the Confluence REST API,
 //! including authentication, page fetching, and content retrieval.
 
-use std::time::Duration;
+use std::collections::VecDeque;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
+use tokio::time::sleep;
 use url::Url;
 
 /// Trait for Confluence API operations (enables testing with fake
@@ -33,11 +37,63 @@ pub trait ConfluenceApi: Send + Sync {
 }
 
 /// Confluence API client
+#[derive(Clone)]
 pub struct ConfluenceClient {
   base_url: String,
   username: String,
   token: String,
   client: reqwest::Client,
+  rate_limiter: Arc<RequestRateLimiter>,
+}
+
+/// Simple fixed-window rate limiter to cap the number of requests per interval.
+#[derive(Debug)]
+struct RequestRateLimiter {
+  max_requests: usize,
+  window: Duration,
+  timestamps: Mutex<VecDeque<Instant>>,
+}
+
+impl RequestRateLimiter {
+  fn new(max_requests: usize, window: Duration) -> Self {
+    Self {
+      max_requests,
+      window,
+      timestamps: Mutex::new(VecDeque::with_capacity(max_requests)),
+    }
+  }
+
+  async fn acquire(&self) {
+    loop {
+      let mut timestamps = self.timestamps.lock().await;
+      let now = Instant::now();
+
+      while let Some(earliest) = timestamps.front()
+        && now.duration_since(*earliest) >= self.window
+      {
+        timestamps.pop_front();
+      }
+
+      if timestamps.len() < self.max_requests {
+        timestamps.push_back(now);
+        return;
+      }
+
+      let earliest = *timestamps.front().expect("rate limiter queue should never be empty");
+      let elapsed = now.duration_since(earliest);
+      let wait_duration = if elapsed >= self.window {
+        Duration::from_secs(0)
+      } else {
+        self.window - elapsed
+      };
+
+      drop(timestamps);
+
+      if wait_duration > Duration::from_secs(0) {
+        sleep(wait_duration).await;
+      }
+    }
+  }
 }
 
 /// Confluence page metadata and content
@@ -162,15 +218,21 @@ impl ConfluenceClient {
   /// * `username` - The user's email address
   /// * `token` - The API token
   /// * `timeout_secs` - Request timeout in seconds
+  /// * `rate_limit` - Maximum requests per second
   pub fn new(
     base_url: impl Into<String>,
     username: impl Into<String>,
     token: impl Into<String>,
     timeout_secs: u64,
+    rate_limit: usize,
   ) -> Result<Self> {
     let base_url = base_url.into();
     let username = username.into();
     let token = token.into();
+
+    if rate_limit == 0 {
+      return Err(anyhow!("Rate limit must be at least 1 request per second"));
+    }
 
     // Normalize base URL (remove trailing slash)
     let base_url = base_url.trim_end_matches('/').to_string();
@@ -191,6 +253,7 @@ impl ConfluenceClient {
       username,
       token,
       client,
+      rate_limiter: Arc::new(RequestRateLimiter::new(rate_limit, Duration::from_secs(1))),
     })
   }
 
@@ -204,6 +267,8 @@ impl ConfluenceClient {
 #[async_trait]
 impl ConfluenceApi for ConfluenceClient {
   async fn get_page(&self, page_id: &str) -> Result<Page> {
+    self.rate_limiter.acquire().await;
+
     let url = format!(
       "{}/wiki/rest/api/content/{}?expand=body.storage,body.view,space",
       self.base_url, page_id
@@ -236,6 +301,8 @@ impl ConfluenceApi for ConfluenceClient {
   }
 
   async fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>> {
+    self.rate_limiter.acquire().await;
+
     let url = format!("{}/wiki/rest/api/content/{}/child/page", self.base_url, page_id);
 
     let response = self
@@ -265,6 +332,8 @@ impl ConfluenceApi for ConfluenceClient {
   }
 
   async fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
+    self.rate_limiter.acquire().await;
+
     let url = format!("{}/wiki/rest/api/content/{}/child/attachment", self.base_url, page_id);
 
     let response = self
@@ -300,6 +369,8 @@ impl ConfluenceApi for ConfluenceClient {
     } else {
       format!("{}{}", self.base_url, url)
     };
+
+    self.rate_limiter.acquire().await;
 
     let response = self
       .client
@@ -341,6 +412,8 @@ impl ConfluenceApi for ConfluenceClient {
   }
 
   async fn test_auth(&self) -> Result<UserInfo> {
+    self.rate_limiter.acquire().await;
+
     let url = format!("{}/wiki/rest/api/user/current", self.base_url);
 
     let response = self
@@ -523,7 +596,7 @@ mod tests {
 
   #[test]
   fn test_confluence_client_new() {
-    let client = ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30);
+    let client = ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 5);
     assert!(client.is_ok());
     let client = client.unwrap();
     assert_eq!(client.base_url, "https://example.atlassian.net");
@@ -533,13 +606,21 @@ mod tests {
 
   #[test]
   fn test_confluence_client_new_removes_trailing_slash() {
-    let client = ConfluenceClient::new("https://example.atlassian.net/", "user@example.com", "test-token", 30).unwrap();
+    let client = ConfluenceClient::new(
+      "https://example.atlassian.net/",
+      "user@example.com",
+      "test-token",
+      30,
+      2,
+    )
+    .unwrap();
     assert_eq!(client.base_url, "https://example.atlassian.net");
   }
 
   #[test]
   fn test_auth_header_format() {
-    let client = ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30).unwrap();
+    let client =
+      ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 3).unwrap();
 
     let auth_header = client.auth_header();
     assert!(auth_header.starts_with("Basic "));
@@ -577,5 +658,27 @@ mod tests {
     let result = parse_confluence_url(url);
     // This should error because file:// scheme doesn't have a host
     assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_confluence_client_rejects_zero_rate_limit() {
+    let client = ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 0);
+    assert!(client.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_rate_limiter_throttles_requests() {
+    let limiter = RequestRateLimiter::new(2, Duration::from_secs(1));
+    let start = Instant::now();
+
+    limiter.acquire().await;
+    limiter.acquire().await;
+    limiter.acquire().await;
+
+    assert!(
+      start.elapsed() >= Duration::from_millis(900),
+      "expected at least 900ms elapsed, got {:?}",
+      start.elapsed()
+    );
   }
 }

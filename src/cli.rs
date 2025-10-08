@@ -287,6 +287,10 @@ impl Cli {
       return Err("--max-depth requires --children".to_string());
     }
 
+    if self.performance.rate_limit == 0 {
+      return Err("--rate-limit must be at least 1 request per second".to_string());
+    }
+
     Ok(())
   }
 }

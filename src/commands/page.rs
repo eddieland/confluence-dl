@@ -80,7 +80,13 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
 
   // Create API client
   println!("\n{} {}", colors.info("→"), colors.info("Connecting to Confluence"));
-  let client = confluence::ConfluenceClient::new(&url_info.base_url, &username, &token, cli.performance.timeout)?;
+  let client = confluence::ConfluenceClient::new(
+    &url_info.base_url,
+    &username,
+    &token,
+    cli.performance.timeout,
+    cli.performance.rate_limit,
+  )?;
 
   // Check if we should download children
   if cli.page.children {
