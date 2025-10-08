@@ -297,18 +297,6 @@ cargo nextest run
 
 See [`AGENTS.md`](AGENTS.md:1) for detailed development guidelines.
 
-## Future Features
-
-Coming in future versions:
-
-- **Space-level exports**: Download entire Confluence spaces
-- **Watch mode**: Continuous sync for page trees
-- **Diff mode**: Show what changed since last export
-- **Config files**: Persistent settings via `.confluence-dl.toml`
-- **Custom templates**: Customize markdown output format
-
-See [`docs/CLI_DESIGN.md`](docs/CLI_DESIGN.md:1) for the complete roadmap.
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE:1) file for details.
