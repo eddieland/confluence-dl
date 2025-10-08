@@ -304,3 +304,177 @@ pub fn sample_grandchild_page_response() -> serde_json::Value {
     }
   })
 }
+
+// Sample response for a meeting notes overview page with macros
+pub fn sample_meeting_notes_overview_response() -> serde_json::Value {
+  let storage_value = concat!(
+    "<p style=\"text-align: right;\"><ac:macro ac:name=\"create-from-template\">",
+    "<ac:parameter ac:name=\"contentBlueprintId\">484f8c9d-447d-43cb-b290-33a51cb87d67</ac:parameter>",
+    "<ac:parameter ac:name=\"blueprintModuleCompleteKey\">com.atlassian.confluence.plugins.confluence-business-blueprints:meeting-notes-blueprint</ac:parameter>",
+    "<ac:parameter ac:name=\"createButtonLabel\">Create meeting note</ac:parameter>",
+    "</ac:macro></p>",
+    "<h2>Incomplete tasks from meetings</h2>",
+    "<p><ac:macro ac:name=\"tasks-report-macro\">",
+    "<ac:parameter ac:name=\"spaces\">~6320c26429083bbe8cc369b0</ac:parameter>",
+    "<ac:parameter ac:name=\"pageSize\">10</ac:parameter>",
+    "<ac:parameter ac:name=\"status\">incomplete</ac:parameter>",
+    "<ac:parameter ac:name=\"labels\">meeting-notes</ac:parameter>",
+    "</ac:macro></p>",
+    "<h2>Decisions from meetings</h2>",
+    "<p><ac:macro ac:name=\"decisionreport\">",
+    "<ac:parameter ac:name=\"cql\">space = \"~6320c26429083bbe8cc369b0\" and label = \"meeting-notes\"</ac:parameter>",
+    "</ac:macro></p>",
+    "<h2>All meeting notes</h2>",
+    "<p><ac:macro ac:name=\"content-report-table\">",
+    "<ac:parameter ac:name=\"contentBlueprintId\">484f8c9d-447d-43cb-b290-33a51cb87d67</ac:parameter>",
+    "<ac:parameter ac:name=\"analyticsKey\">meeting-notes</ac:parameter>",
+    "<ac:parameter ac:name=\"spaces\">~6320c26429083bbe8cc369b0</ac:parameter>",
+    "<ac:parameter ac:name=\"createButtonLabel\">Create meeting note</ac:parameter>",
+    "<ac:parameter ac:name=\"labels\">meeting-notes</ac:parameter>",
+    "</ac:macro></p>"
+  );
+
+  json!({
+    "id": "998877",
+    "type": "page",
+    "status": "current",
+    "title": "Meeting notes in space",
+    "body": {
+      "storage": {
+        "value": storage_value,
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<h2>Incomplete tasks from meetings</h2><h2>Decisions from meetings</h2><h2>All meeting notes</h2>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "~6320c26429083bbe8cc369b0",
+      "name": "Edward Jones",
+      "type": "personal"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/~6320c26429083bbe8cc369b0/pages/998877/Meeting+notes+in+space",
+      "self": "https://eddieland.atlassian.net/wiki/rest/api/content/998877"
+    }
+  })
+}
+
+// Sample response for a meeting notes page with tasks, tables, and emoticons
+pub fn sample_meeting_notes_with_tasks_response() -> serde_json::Value {
+  let storage_value = concat!(
+    "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"1f5d3\" />&nbsp;Date</h2>",
+    "<p><time datetime=\"2025-10-07\" /></p>",
+    "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"1f465\" />&nbsp;Participants</h2>",
+    "<ul><li><p><ac:link><ri:user ri:account-id=\"6320c26429083bbe8cc369b0\" /></ac:link></p></li></ul>",
+    "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"1f945\" />&nbsp;Goals</h2>",
+    "<p><ac:placeholder>List goals for this meeting</ac:placeholder></p>",
+    "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"1f5e3\" />&nbsp;Discussion topics</h2>",
+    "<table data-table-width=\"760\"><tbody>",
+    "<tr><th><p><strong>Time</strong></p></th><th><p><strong>Topic</strong></p></th></tr>",
+    "<tr><td><p>10:00</p></td><td><p>Project update</p></td></tr>",
+    "</tbody></table>",
+    "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"2705\" />&nbsp;Action items</h2>",
+    "<ac:task-list>",
+    "<ac:task><ac:task-id>3</ac:task-id>",
+    "<ac:task-status>incomplete</ac:task-status>",
+    "<ac:task-body>Review architecture proposal</ac:task-body></ac:task>",
+    "<ac:task><ac:task-id>4</ac:task-id>",
+    "<ac:task-status>complete</ac:task-status>",
+    "<ac:task-body>Update documentation</ac:task-body></ac:task>",
+    "</ac:task-list>"
+  );
+
+  json!({
+    "id": "887766",
+    "type": "page",
+    "status": "current",
+    "title": "2025-10-07 Meeting notes",
+    "body": {
+      "storage": {
+        "value": storage_value,
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<h2>Date</h2><p>2025-10-07</p><h2>Participants</h2><h2>Goals</h2><h2>Discussion topics</h2><h2>Action items</h2>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "~6320c26429083bbe8cc369b0",
+      "name": "Edward Jones",
+      "type": "personal"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/~6320c26429083bbe8cc369b0/pages/887766/2025-10-07+Meeting+notes",
+      "self": "https://eddieland.atlassian.net/wiki/rest/api/content/887766"
+    }
+  })
+}
+
+// Sample response for a comprehensive test page with all XML features
+pub fn sample_comprehensive_features_response() -> serde_json::Value {
+  let storage_value = concat!(
+    "<h1>Comprehensive Test Page</h1>",
+    "<h2>Basic Formatting</h2>",
+    "<p>This page contains <strong>bold</strong>, <em>italic</em>, and <u>underlined</u> text.</p>",
+    "<p>It also has <code>inline code</code> and <a href=\"https://example.com\">external links</a>.</p>",
+    "<h2>Lists</h2>",
+    "<ul><li>Unordered item 1</li><li>Unordered item 2<ul><li>Nested item</li></ul></li></ul>",
+    "<ol><li>Ordered item 1</li><li>Ordered item 2</li></ol>",
+    "<h2>Emoticons and Icons</h2>",
+    "<p><ac:emoticon ac:name=\"tick\" ac:emoji-id=\"2705\" /> Success indicator</p>",
+    "<p><ac:emoticon ac:name=\"cross\" ac:emoji-id=\"274c\" /> Failure indicator</p>",
+    "<h2>Internal Links</h2>",
+    "<p>See <ac:link><ri:page ri:content-title=\"Getting Started Guide\" /></ac:link> for more information.</p>",
+    "<h2>User Mentions</h2>",
+    "<p>Assigned to <ac:link><ri:user ri:account-id=\"6320c26429083bbe8cc369b0\" /></ac:link> for review.</p>",
+    "<h2>Task Lists</h2>",
+    "<ac:task-list>",
+    "<ac:task><ac:task-id>1</ac:task-id><ac:task-status>complete</ac:task-status><ac:task-body>Complete this task</ac:task-body></ac:task>",
+    "<ac:task><ac:task-id>2</ac:task-id><ac:task-status>incomplete</ac:task-status><ac:task-body>Pending task</ac:task-body></ac:task>",
+    "</ac:task-list>",
+    "<h2>Tables</h2>",
+    "<table data-table-width=\"760\"><tbody>",
+    "<tr><th><p><strong>Header 1</strong></p></th><th><p><strong>Header 2</strong></p></th></tr>",
+    "<tr><td><p>Cell 1</p></td><td><p>Cell 2</p></td></tr>",
+    "</tbody></table>",
+    "<h2>Code Blocks</h2>",
+    "<ac:structured-macro ac:name=\"code\"><ac:parameter ac:name=\"language\">javascript</ac:parameter>",
+    "<ac:plain-text-body><![CDATA[function greet(name) { console.log(name); }]]></ac:plain-text-body>",
+    "</ac:structured-macro>",
+    "<h2>Images</h2>",
+    "<ac:image ac:height=\"300\"><ri:attachment ri:filename=\"diagram.png\" /></ac:image>",
+    "<h2>Placeholders</h2>",
+    "<p><ac:placeholder>This is a placeholder for future content</ac:placeholder></p>",
+    "<h2>Time Elements</h2>",
+    "<p>Meeting date: <time datetime=\"2025-10-07\" /></p>"
+  );
+
+  json!({
+    "id": "776655",
+    "type": "page",
+    "status": "current",
+    "title": "Comprehensive Feature Test Page",
+    "body": {
+      "storage": {
+        "value": storage_value,
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<h1>Comprehensive Test Page</h1><h2>Basic Formatting</h2><p>This page contains bold, italic, and underlined text.</p>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "TEST",
+      "name": "Test Space",
+      "type": "global"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/TEST/pages/776655/Comprehensive+Feature+Test+Page",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/776655"
+    }
+  })
+}

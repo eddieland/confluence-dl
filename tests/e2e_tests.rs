@@ -8,6 +8,7 @@ mod common;
 use common::fake_confluence::FakeConfluenceClient;
 use common::fixtures;
 use confluence_dl::confluence::ConfluenceApi;
+use insta::assert_snapshot;
 
 #[test]
 fn test_fetch_basic_page() {
@@ -290,7 +291,7 @@ fn test_image_download_workflow() {
   // Verify files exist
   for (original_filename, local_path) in &filename_map {
     let full_path = output_path.join(local_path);
-    assert!(full_path.exists(), "Image file should exist: {:?}", full_path);
+    assert!(full_path.exists(), "Image file should exist: {full_path:?}");
     println!("Downloaded {} -> {}", original_filename, local_path.display());
   }
 
@@ -301,8 +302,7 @@ fn test_image_download_workflow() {
   // Verify links were updated to point to the images directory
   assert!(
     updated_markdown.contains("](images/"),
-    "Links should be updated to images directory: {}",
-    updated_markdown
+    "Links should be updated to images directory: {updated_markdown}"
   );
 }
 
@@ -483,4 +483,191 @@ fn test_page_tree_circular_reference_detection() {
   let child = &tree.children[0];
   assert_eq!(child.page.title, "Child Page 1");
   assert!(child.children.is_empty(), "Circular reference should be skipped");
+}
+
+#[test]
+fn test_convert_comprehensive_features_page_to_markdown() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add the comprehensive test page
+  client.add_page_from_json("776655", fixtures::sample_comprehensive_features_response());
+
+  // Fetch the page
+  let page = client.get_page("776655").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  assert_snapshot!(markdown);
+}
+
+#[test]
+fn test_convert_meeting_notes_overview_to_markdown() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add the meeting notes overview page
+  client.add_page_from_json("998877", fixtures::sample_meeting_notes_overview_response());
+
+  // Fetch the page
+  let page = client.get_page("998877").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  assert_snapshot!(markdown);
+}
+
+#[test]
+fn test_convert_meeting_notes_with_tasks_to_markdown() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add the meeting notes with tasks page
+  client.add_page_from_json("887766", fixtures::sample_meeting_notes_with_tasks_response());
+
+  // Fetch the page
+  let page = client.get_page("887766").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  assert_snapshot!(markdown);
+}
+
+#[test]
+fn test_convert_complex_page_with_code_to_markdown() {
+  use confluence_dl::markdown;
+
+  let client = FakeConfluenceClient::with_sample_pages();
+
+  // Fetch the complex page (already in sample_pages)
+  let page = client.get_page("789012").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  assert_snapshot!(markdown);
+}
+
+#[test]
+fn test_convert_page_with_internal_links_to_markdown() {
+  use confluence_dl::markdown;
+
+  let client = FakeConfluenceClient::with_sample_pages();
+
+  // Fetch the page with internal links
+  let page = client.get_page("345678").unwrap();
+
+  // Extract storage content
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  // Convert to markdown
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  assert_snapshot!(markdown);
+}
+
+#[test]
+fn test_end_to_end_page_fetch_and_convert() {
+  use confluence_dl::markdown;
+
+  let client = FakeConfluenceClient::with_sample_pages();
+
+  // Test a complete workflow: fetch page -> extract content -> convert to
+  // markdown
+  let page_id = "123456";
+  let page = client.get_page(page_id).unwrap();
+
+  assert_eq!(page.id, page_id);
+  assert_eq!(page.title, "Getting Started Guide");
+
+  // Extract and convert
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .expect("Page should have storage content");
+
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  assert_snapshot!(markdown);
+}
+
+#[test]
+fn test_markdown_conversion_handles_empty_content() {
+  use confluence_dl::markdown;
+
+  // Test that empty/minimal content doesn't crash
+  let empty_storage = "";
+  let result = markdown::storage_to_markdown(empty_storage, 0);
+  assert!(result.is_ok(), "Should handle empty content");
+
+  let minimal_storage = "<p>Test</p>";
+  let markdown = markdown::storage_to_markdown(minimal_storage, 0).unwrap();
+  assert!(markdown.contains("Test"), "Should contain text");
+}
+
+#[test]
+fn test_markdown_conversion_preserves_structure() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  // Add the comprehensive page
+  client.add_page_from_json("776655", fixtures::sample_comprehensive_features_response());
+  let page = client.get_page("776655").unwrap();
+
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+
+  assert_snapshot!(markdown);
 }
