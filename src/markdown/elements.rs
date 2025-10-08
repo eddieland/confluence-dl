@@ -85,7 +85,14 @@ fn format_list_item(item: &str, prefix: &str) -> String {
   formatted
 }
 
-/// Convert an element and its children to markdown recursively.
+/// Converts an element and its children to Markdown recursively.
+///
+/// # Arguments
+/// * `node` - Root node whose descendants should be rendered.
+/// * `verbose` - Verbosity level that controls trace/debug logging.
+///
+/// # Returns
+/// A Markdown string representing the element and its descendants.
 pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
   let mut result = String::new();
 

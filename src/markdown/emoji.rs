@@ -8,13 +8,21 @@ use tracing::{debug, trace};
 
 use super::utils::{get_attribute, get_element_text};
 
-/// Convert an emoji element to markdown by resolving its codepoint.
+/// Converts an emoji element to Markdown by resolving its codepoint.
 ///
 /// Confluence stores emojis with various attributes:
 /// - `ac:emoji-id`: Hex codepoint(s) like "1f44b" or "1f469-200d-1f4bb"
 /// - `ac:shortcut`: Text shortcut like ":)"
 /// - `ac:shortname`: Emoji name like ":wave:"
 /// - `ac:emoji-fallback`: Fallback text representation
+///
+/// # Arguments
+/// * `element` - The `<ac:emoji>` node to convert.
+/// * `verbose` - Verbosity level that controls trace/debug logging.
+///
+/// # Returns
+/// The best matching emoji text or an empty string when the element cannot be
+/// resolved.
 pub fn convert_emoji_to_markdown(element: Node, verbose: u8) -> String {
   let emoji_id = get_attribute(element, "ac:emoji-id");
   let shortcut = get_attribute(element, "ac:shortcut");
@@ -58,10 +66,18 @@ pub fn convert_emoji_to_markdown(element: Node, verbose: u8) -> String {
   if !text.trim().is_empty() { text } else { String::new() }
 }
 
-/// Try to resolve emoji metadata stored on span elements.
+/// Attempts to resolve emoji metadata stored on `<span>` elements.
 ///
 /// Some Confluence content stores emoji information as data attributes on span
 /// elements.
+///
+/// # Arguments
+/// * `element` - The span node that may contain emoji metadata attributes.
+/// * `verbose` - Verbosity level that controls trace/debug logging.
+///
+/// # Returns
+/// `Some(String)` containing the resolved emoji text, or `None` when no emoji
+/// metadata is present.
 pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
   let emoji_id = get_attribute(element, "data-emoji-id");
   let emoji_shortname = get_attribute(element, "data-emoji-shortname");
@@ -108,10 +124,19 @@ pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
   None
 }
 
-/// Convert an emoji identifier like "1f44b" or "1f469-200d-1f4bb" into unicode.
+/// Converts an emoji identifier like "1f44b" or "1f469-200d-1f4bb" into
+/// Unicode characters.
 ///
 /// Confluence stores emoji IDs as hexadecimal Unicode codepoints, sometimes
 /// with multiple codepoints joined by hyphens for compound emoji.
+///
+/// # Arguments
+/// * `id` - Emoji identifier from Confluence metadata.
+/// * `verbose` - Verbosity level that controls trace/debug logging.
+///
+/// # Returns
+/// `Some(String)` containing the Unicode emoji when parsing succeeds, or `None`
+/// if the identifier is invalid.
 pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
   let trimmed = id.trim().trim_start_matches("emoji-").trim_start_matches("emoji/");
   if trimmed.is_empty() {

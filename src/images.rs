@@ -23,10 +23,16 @@ pub struct ImageReference {
   pub alt_text: String,
 }
 
-/// Extract image references from Confluence storage format content
+/// Extracts image references from Confluence storage format content.
 ///
 /// Parses the HTML/XML content to find `<ac:image>` tags and extracts
 /// the attachment filenames and alt text.
+///
+/// # Arguments
+/// * `storage_content` - Raw storage format XML/HTML snippet from Confluence.
+///
+/// # Returns
+/// A vector of [`ImageReference`] values describing discovered images.
 pub fn extract_image_references(storage_content: &str) -> Result<Vec<ImageReference>> {
   // Pre-process: Replace HTML entities with Unicode characters
   // roxmltree only supports XML's 5 predefined entities, not HTML entities
@@ -54,6 +60,13 @@ pub fn extract_image_references(storage_content: &str) -> Result<Vec<ImageRefere
   Ok(images)
 }
 
+/// Splits a qualified tag or attribute name into prefix and local name.
+///
+/// # Arguments
+/// * `name` - The tag or attribute, e.g. `ri:filename`.
+///
+/// # Returns
+/// A tuple of `(prefix, local)` where `prefix` is `None` for unqualified names.
 fn split_qualified_name(name: &str) -> (Option<&str>, &str) {
   if let Some((prefix, local)) = name.split_once(':') {
     (Some(prefix), local)
@@ -62,6 +75,14 @@ fn split_qualified_name(name: &str) -> (Option<&str>, &str) {
   }
 }
 
+/// Tests whether a node matches an expected tag name with optional namespace.
+///
+/// # Arguments
+/// * `node` - The element to inspect.
+/// * `name` - Qualified tag name to compare against, e.g. `ac:image`.
+///
+/// # Returns
+/// `true` when the tag matches the provided name, otherwise `false`.
 fn matches_tag<'a, 'input>(node: Node<'a, 'input>, name: &str) -> bool {
   if !node.is_element() {
     return false;
@@ -82,6 +103,15 @@ fn matches_tag<'a, 'input>(node: Node<'a, 'input>, name: &str) -> bool {
   }
 }
 
+/// Retrieves an attribute value from a node, handling namespaced attributes.
+///
+/// # Arguments
+/// * `node` - The element to inspect.
+/// * `attr_name` - The attribute to retrieve, optionally namespaced.
+///
+/// # Returns
+/// `Some(String)` containing the attribute value when present, otherwise
+/// `None`.
 fn get_attribute<'a, 'input>(node: Node<'a, 'input>, attr_name: &str) -> Option<String> {
   if !node.is_element() {
     return None;
@@ -108,6 +138,18 @@ fn get_attribute<'a, 'input>(node: Node<'a, 'input>, attr_name: &str) -> Option<
   None
 }
 
+/// Wraps storage format markup with synthetic namespace declarations.
+///
+/// Confluence storage often references `ac:` or `ri:` prefixes without
+/// declaring them. Adding the wrapper element allows `roxmltree` to parse the
+/// snippet successfully.
+///
+/// # Arguments
+/// * `storage_content` - Raw storage format XML/HTML snippet from Confluence.
+///
+/// # Returns
+/// A `String` containing the original content nested inside a synthetic root
+/// element with namespace declarations.
 fn wrap_with_namespaces(storage_content: &str) -> String {
   let mut prefixes = BTreeSet::new();
 
@@ -150,6 +192,14 @@ fn wrap_with_namespaces(storage_content: &str) -> String {
   result
 }
 
+/// Determines whether a namespace prefix is syntactically valid.
+///
+/// # Arguments
+/// * `prefix` - Candidate namespace prefix found in the source markup.
+///
+/// # Returns
+/// `true` if the prefix contains only ASCII alphanumeric characters, hyphens,
+/// or underscores.
 fn is_valid_prefix(prefix: &str) -> bool {
   if prefix.is_empty() {
     return false;
@@ -159,10 +209,17 @@ fn is_valid_prefix(prefix: &str) -> bool {
     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// Replace common HTML entities with their Unicode characters before XML
-/// parsing roxmltree only recognizes XML's 5 predefined entities (&lt; &gt;
-/// &amp; &quot; &apos;) so we need to convert HTML entities to literal
-/// characters
+/// Replaces common HTML entities with Unicode characters before XML parsing.
+///
+/// `roxmltree` only recognizes XML's predefined entities (`&lt;`, `&gt;`,
+/// `&amp;`, `&quot;`, `&apos;`). Confluence storage content frequently includes
+/// the broader HTML entity set, so we normalize them before parsing.
+///
+/// # Arguments
+/// * `text` - Raw storage format markup that may contain HTML entities.
+///
+/// # Returns
+/// A `String` with known HTML entities replaced by their Unicode equivalents.
 fn preprocess_html_entities(text: &str) -> String {
   text
     .replace("&nbsp;", "\u{00A0}") // non-breaking space
@@ -191,13 +248,18 @@ fn preprocess_html_entities(text: &str) -> String {
     .replace("&darr;", "\u{2193}") // downwards arrow
 }
 
-/// Download images for a page
+/// Downloads images referenced in page content and writes them to disk.
 ///
-/// Downloads all images referenced in the page content and saves them
-/// to the specified output directory.
+/// # Arguments
+/// * `client` - Confluence API client used to fetch attachments and content.
+/// * `page_id` - Identifier of the page whose images should be downloaded.
+/// * `image_refs` - References discovered in the page's storage content.
+/// * `output_dir` - Root directory where assets should be written.
+/// * `images_subdir` - Subdirectory under `output_dir` for storing images.
+/// * `overwrite` - When `true`, existing files are replaced.
 ///
-/// Returns a map of original filenames to local file paths (relative to output
-/// root).
+/// # Returns
+/// A map from original attachment filenames to relative filesystem paths.
 pub fn download_images(
   client: &dyn ConfluenceApi,
   page_id: &str,
@@ -261,10 +323,14 @@ pub fn download_images(
   Ok(filename_map)
 }
 
-/// Update markdown image links to reference local files
+/// Updates Markdown image links to reference locally downloaded files.
 ///
-/// Replaces image URLs in the markdown with local file paths based on
-/// the provided filename map.
+/// # Arguments
+/// * `markdown` - Existing Markdown content containing image references.
+/// * `filename_map` - Mapping from attachment filenames to relative paths.
+///
+/// # Returns
+/// A new Markdown string with image URLs replaced by local filesystem paths.
 pub fn update_markdown_image_links(markdown: &str, filename_map: &HashMap<String, PathBuf>) -> String {
   let mut result = markdown.to_string();
 
@@ -293,10 +359,16 @@ pub fn update_markdown_image_links(markdown: &str, filename_map: &HashMap<String
   result
 }
 
-/// Sanitize a filename for safe filesystem storage
+/// Sanitizes a filename for safe filesystem storage.
 ///
 /// Removes or replaces characters that might cause issues on various
 /// filesystems.
+///
+/// # Arguments
+/// * `filename` - The attachment filename from Confluence metadata.
+///
+/// # Returns
+/// A sanitized filename that can be safely written to disk.
 fn sanitize_filename(filename: &str) -> String {
   filename
     .chars()

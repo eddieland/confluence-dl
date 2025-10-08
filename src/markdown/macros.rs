@@ -8,7 +8,7 @@ use tracing::debug;
 use super::emoji::emoji_id_to_unicode;
 use super::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_attribute, get_element_text};
 
-/// Convert Confluence structured macros to markdown.
+/// Converts Confluence structured macros to Markdown.
 ///
 /// Handles various macro types including:
 /// - `toc`: Table of contents
@@ -18,6 +18,15 @@ use super::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_attribute,
 /// - `expand`: Collapsible sections
 /// - `emoji`: Emoji macros
 /// - `anchor`: Link anchors (rendered as empty)
+///
+/// # Arguments
+/// * `element` - The `<ac:structured-macro>` node to convert.
+/// * `convert_node` - Callback used to recursively render nested nodes.
+/// * `verbose` - Verbosity level that controls trace/debug logging.
+///
+/// # Returns
+/// A Markdown representation of the macro content. Unknown macros fall back to
+/// returning their text content.
 pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) -> String, verbose: u8) -> String {
   let macro_name = get_attribute(element, "ac:name").unwrap_or_default();
 
@@ -86,8 +95,16 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) 
   }
 }
 
-/// Format Confluence admonition macros (note, info, warning, tip) as Markdown
+/// Formats Confluence admonition macros (note, info, warning, tip) as Markdown
 /// blockquotes.
+///
+/// # Arguments
+/// * `macro_name` - The macro identifier such as `note` or `warning`.
+/// * `title` - Optional custom title displayed in the admonition heading.
+/// * `body` - Rich text content inside the admonition block.
+///
+/// # Returns
+/// A Markdown string containing a blockquote-style admonition.
 fn format_admonition_block(macro_name: &str, title: &str, body: &str) -> String {
   let default_title = match macro_name {
     "info" => "Info",
@@ -121,7 +138,14 @@ fn format_admonition_block(macro_name: &str, title: &str, body: &str) -> String 
   result
 }
 
-/// Convert Confluence code macros to fenced code blocks.
+/// Converts Confluence code macros to fenced code blocks.
+///
+/// # Arguments
+/// * `element` - The structured macro node describing the code block.
+/// * `verbose` - Verbosity level that controls trace/debug logging.
+///
+/// # Returns
+/// A Markdown string using triple backticks and optional language annotation.
 fn format_code_block(element: Node, verbose: u8) -> String {
   let language = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "language")
     .map(get_element_text)
@@ -155,7 +179,13 @@ fn format_code_block(element: Node, verbose: u8) -> String {
   result
 }
 
-/// Convert Confluence task list to markdown checkboxes.
+/// Converts Confluence task list macros to Markdown checkboxes.
+///
+/// # Arguments
+/// * `element` - The `<ac:task-list>` node to convert.
+///
+/// # Returns
+/// Markdown representing each task as a checkbox list item.
 pub fn convert_task_list_to_markdown(element: Node) -> String {
   let mut result = String::new();
 
@@ -179,7 +209,13 @@ pub fn convert_task_list_to_markdown(element: Node) -> String {
   result
 }
 
-/// Convert Confluence image to markdown.
+/// Converts Confluence image macros to Markdown image syntax.
+///
+/// # Arguments
+/// * `element` - The `<ac:image>` node to convert.
+///
+/// # Returns
+/// Markdown `![alt](source)` markup using either attachment filenames or URLs.
 pub fn convert_image_to_markdown(element: Node) -> String {
   let alt = get_attribute(element, "ac:alt").unwrap_or_else(|| "image".to_string());
 
@@ -198,10 +234,17 @@ pub fn convert_image_to_markdown(element: Node) -> String {
   format!("\n![{alt}]()\n\n")
 }
 
-/// Convert Confluence link to markdown.
+/// Converts Confluence links to Markdown.
 ///
 /// Handles user mentions (`<ac:link><ri:user .../></ac:link>`) and internal
 /// page links.
+///
+/// # Arguments
+/// * `element` - The `<ac:link>` node to convert.
+/// * `verbose` - Verbosity level that controls trace/debug logging.
+///
+/// # Returns
+/// Markdown-formatted text representing the link target or mention.
 pub fn convert_confluence_link_to_markdown(element: Node, verbose: u8) -> String {
   // Check for user mention
   if let Some(user_node) = find_child_by_tag(element, "ri:user") {
