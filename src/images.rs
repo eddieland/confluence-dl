@@ -28,7 +28,10 @@ pub struct ImageReference {
 /// Parses the HTML/XML content to find `<ac:image>` tags and extracts
 /// the attachment filenames and alt text.
 pub fn extract_image_references(storage_content: &str) -> Result<Vec<ImageReference>> {
-  let wrapped = wrap_with_namespaces(storage_content);
+  // Pre-process: Replace HTML entities with Unicode characters
+  // roxmltree only supports XML's 5 predefined entities, not HTML entities
+  let preprocessed = preprocess_html_entities(storage_content);
+  let wrapped = wrap_with_namespaces(&preprocessed);
   let document = Document::parse(&wrapped).context("Failed to parse Confluence storage content for images")?;
   let mut images = Vec::new();
 
@@ -117,16 +120,18 @@ fn wrap_with_namespaces(storage_content: &str) -> String {
     let segment = segment.trim_start_matches('/');
 
     if let Some((prefix, _)) = segment.split_once(':')
-      && is_valid_prefix(prefix) {
-        prefixes.insert(prefix.to_string());
-      }
+      && is_valid_prefix(prefix)
+    {
+      prefixes.insert(prefix.to_string());
+    }
 
     for attr in segment.split_whitespace() {
       if let Some((name, _)) = attr.split_once('=')
         && let Some((prefix, _)) = name.split_once(':')
-          && is_valid_prefix(prefix) {
-            prefixes.insert(prefix.to_string());
-          }
+        && is_valid_prefix(prefix)
+      {
+        prefixes.insert(prefix.to_string());
+      }
     }
   }
 
@@ -152,6 +157,38 @@ fn is_valid_prefix(prefix: &str) -> bool {
   prefix
     .chars()
     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Replace common HTML entities with their Unicode characters before XML
+/// parsing roxmltree only recognizes XML's 5 predefined entities (&lt; &gt;
+/// &amp; &quot; &apos;) so we need to convert HTML entities to literal
+/// characters
+fn preprocess_html_entities(text: &str) -> String {
+  text
+    .replace("&nbsp;", "\u{00A0}") // non-breaking space
+    .replace("&ndash;", "\u{2013}") // en dash
+    .replace("&mdash;", "\u{2014}") // em dash
+    .replace("&ldquo;", "\u{201C}") // left double quote
+    .replace("&rdquo;", "\u{201D}") // right double quote
+    .replace("&lsquo;", "\u{2018}") // left single quote
+    .replace("&rsquo;", "\u{2019}") // right single quote
+    .replace("&hellip;", "\u{2026}") // horizontal ellipsis
+    .replace("&bull;", "\u{2022}") // bullet
+    .replace("&middot;", "\u{00B7}") // middle dot
+    .replace("&deg;", "\u{00B0}") // degree sign
+    .replace("&copy;", "\u{00A9}") // copyright
+    .replace("&reg;", "\u{00AE}") // registered trademark
+    .replace("&trade;", "\u{2122}") // trademark
+    .replace("&times;", "\u{00D7}") // multiplication sign
+    .replace("&divide;", "\u{00F7}") // division sign
+    .replace("&plusmn;", "\u{00B1}") // plus-minus sign
+    .replace("&ne;", "\u{2260}") // not equal
+    .replace("&le;", "\u{2264}") // less than or equal
+    .replace("&ge;", "\u{2265}") // greater than or equal
+    .replace("&larr;", "\u{2190}") // leftwards arrow
+    .replace("&rarr;", "\u{2192}") // rightwards arrow
+    .replace("&uarr;", "\u{2191}") // upwards arrow
+    .replace("&darr;", "\u{2193}") // downwards arrow
 }
 
 /// Download images for a page

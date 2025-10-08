@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use roxmltree::{Document, Node, NodeType};
 
 const SYNTHETIC_NS_BASE: &str = "https://confluence.example/";
@@ -15,9 +15,30 @@ const SYNTHETIC_NS_BASE: &str = "https://confluence.example/";
 /// This implementation uses proper HTML parsing to handle Confluence's
 /// complex XML/HTML structure.
 pub fn storage_to_markdown(storage_content: &str, verbose: u8) -> Result<String> {
+  // Pre-process: Replace HTML entities with numeric character references
+  // roxmltree only supports XML's 5 predefined entities, not HTML entities
+  let preprocessed = preprocess_html_entities(storage_content);
+
   // Parse the HTML/XML content
-  let wrapped = wrap_with_namespaces(storage_content);
-  let document = Document::parse(&wrapped).context("Failed to parse Confluence storage content")?;
+  let wrapped = wrap_with_namespaces(&preprocessed);
+
+  if verbose >= 4 {
+    eprintln!(
+      "[DEBUG] Wrapped XML (first 500 chars):\n{}",
+      &wrapped.chars().take(500).collect::<String>()
+    );
+  }
+
+  let document = Document::parse(&wrapped).map_err(|e| {
+    if verbose >= 1 {
+      eprintln!("[ERROR] XML parse error: {e}");
+      eprintln!("[ERROR] Wrapped XML length: {} chars", wrapped.len());
+      if verbose >= 3 {
+        eprintln!("[ERROR] Full wrapped XML:\n{wrapped}");
+      }
+    }
+    anyhow::anyhow!("Failed to parse Confluence storage content: {e}")
+  })?;
 
   // Convert to markdown
   let markdown = convert_node_to_markdown(document.root_element(), verbose);
@@ -201,16 +222,18 @@ fn wrap_with_namespaces(storage_content: &str) -> String {
     let segment = segment.trim_start_matches('/');
 
     if let Some((prefix, _)) = segment.split_once(':')
-      && is_valid_prefix(prefix) {
-        prefixes.insert(prefix.to_string());
-      }
+      && is_valid_prefix(prefix)
+    {
+      prefixes.insert(prefix.to_string());
+    }
 
     for attr in segment.split_whitespace() {
       if let Some((name, _)) = attr.split_once('=')
         && let Some((prefix, _)) = name.split_once(':')
-          && is_valid_prefix(prefix) {
-            prefixes.insert(prefix.to_string());
-          }
+        && is_valid_prefix(prefix)
+      {
+        prefixes.insert(prefix.to_string());
+      }
     }
   }
 
@@ -456,6 +479,7 @@ fn convert_emoji_to_markdown(element: Node, verbose: u8) -> String {
   let emoji_id = get_attribute(element, "ac:emoji-id");
   let shortcut = get_attribute(element, "ac:shortcut");
   let shortname = get_attribute(element, "ac:shortname").or_else(|| get_attribute(element, "ac:emoji-shortname"));
+  let fallback = get_attribute(element, "ac:emoji-fallback");
 
   if let Some(id) = emoji_id.as_deref()
     && let Some(emoji) = emoji_id_to_unicode(id, verbose)
@@ -464,6 +488,13 @@ fn convert_emoji_to_markdown(element: Node, verbose: u8) -> String {
       eprintln!("[DEBUG] Emoji conversion: id={id} -> {emoji}");
     }
     return emoji;
+  }
+
+  if let Some(fb) = fallback.as_deref() {
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Emoji fallback: {fb}");
+    }
+    return fb.to_string();
   }
 
   if let Some(sc) = shortcut.as_deref() {
@@ -678,6 +709,38 @@ fn convert_table_to_markdown(element: Node) -> String {
 }
 
 /// Decode common HTML entities
+/// Replace common HTML entities with their Unicode characters before XML
+/// parsing roxmltree only recognizes XML's 5 predefined entities (&lt; &gt;
+/// &amp; &quot; &apos;) so we need to convert HTML entities to literal
+/// characters or numeric references
+fn preprocess_html_entities(text: &str) -> String {
+  text
+    .replace("&nbsp;", "\u{00A0}") // non-breaking space
+    .replace("&ndash;", "\u{2013}") // en dash
+    .replace("&mdash;", "\u{2014}") // em dash
+    .replace("&ldquo;", "\u{201C}") // left double quote
+    .replace("&rdquo;", "\u{201D}") // right double quote
+    .replace("&lsquo;", "\u{2018}") // left single quote
+    .replace("&rsquo;", "\u{2019}") // right single quote
+    .replace("&hellip;", "\u{2026}") // horizontal ellipsis
+    .replace("&bull;", "\u{2022}") // bullet
+    .replace("&middot;", "\u{00B7}") // middle dot
+    .replace("&deg;", "\u{00B0}") // degree sign
+    .replace("&copy;", "\u{00A9}") // copyright
+    .replace("&reg;", "\u{00AE}") // registered trademark
+    .replace("&trade;", "\u{2122}") // trademark
+    .replace("&times;", "\u{00D7}") // multiplication sign
+    .replace("&divide;", "\u{00F7}") // division sign
+    .replace("&plusmn;", "\u{00B1}") // plus-minus sign
+    .replace("&ne;", "\u{2260}") // not equal
+    .replace("&le;", "\u{2264}") // less than or equal
+    .replace("&ge;", "\u{2265}") // greater than or equal
+    .replace("&larr;", "\u{2190}") // leftwards arrow
+    .replace("&rarr;", "\u{2192}") // rightwards arrow
+    .replace("&uarr;", "\u{2191}") // upwards arrow
+    .replace("&darr;", "\u{2193}") // downwards arrow
+}
+
 fn decode_html_entities(text: &str) -> String {
   let replaced = text
     .replace("&nbsp;", " ")
@@ -890,7 +953,7 @@ mod tests {
     - Item 1
     - Item 2
 
-
+          
     1. First
     2. Second
     ");
