@@ -1,6 +1,6 @@
 [package]
 name = "confluence-dl"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 authors = ["Edward Jones <e@eddie.land>"]
 description = "CLI for exporting Confluence spaces and pages to Markdown"
