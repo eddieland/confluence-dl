@@ -3,19 +3,24 @@
 //! This module provides functionality to convert Confluence storage format
 //! (XHTML-like) to Markdown using proper HTML parsing.
 
-use anyhow::Result;
-use scraper::{Html, Node, Selector};
+use anyhow::{Context, Result};
+use roxmltree::{Document, Node, NodeType};
 
 /// Convert Confluence storage format to Markdown
 ///
 /// This implementation uses proper HTML parsing to handle Confluence's
 /// complex XML/HTML structure.
 pub fn storage_to_markdown(storage_content: &str, verbose: u8) -> Result<String> {
-  // Parse the HTML/XML content
-  let document = Html::parse_document(storage_content);
+  // Parse the HTML/XML content using a namespace-aware XML parser.
+  //
+  // Confluence storage format frequently omits namespace declarations in
+  // snippets, so we wrap the payload in a lightweight root element that
+  // provides the standard prefix definitions used throughout the format.
+  let wrapped = wrap_storage_content(storage_content);
+  let document = Document::parse(&wrapped).context("failed to parse Confluence storage content as XML")?;
 
   // Convert to markdown
-  let markdown = convert_element_to_markdown(&document.root_element(), verbose);
+  let markdown = convert_element_to_markdown(document.root_element(), verbose);
 
   // Clean up the result
   let cleaned = clean_markdown(&markdown);
@@ -23,138 +28,188 @@ pub fn storage_to_markdown(storage_content: &str, verbose: u8) -> Result<String>
   Ok(cleaned)
 }
 
+const AC_NAMESPACE: &str = "http://atlassian.com/content";
+const RI_NAMESPACE: &str = "http://atlassian.com/resource/identifier";
+const EMOJI_NAMESPACE: &str = "http://atlassian.com/emoji";
+
+fn wrap_storage_content(storage_content: &str) -> String {
+  format!(
+    "<confluence-root xmlns:ac=\"{AC_NAMESPACE}\" xmlns:ri=\"{RI_NAMESPACE}\" xmlns:emoji=\"{EMOJI_NAMESPACE}\">{storage_content}</confluence-root>"
+  )
+}
+
+fn qualified_name<'a, 'input>(node: Node<'a, 'input>) -> Option<String> {
+  if !node.is_element() {
+    return None;
+  }
+
+  let local = node.tag_name().name();
+  match node.tag_name().namespace() {
+    Some(namespace) => node
+      .lookup_prefix(namespace)
+      .map(|prefix| format!("{prefix}:{local}"))
+      .or_else(|| Some(local.to_string())),
+    None => Some(local.to_string()),
+  }
+}
+
+fn has_tag<'a, 'input>(node: Node<'a, 'input>, name: &str) -> bool {
+  if !node.is_element() {
+    return false;
+  }
+
+  match name.split_once(':') {
+    Some((prefix, local)) => {
+      if node.tag_name().name() != local {
+        return false;
+      }
+
+      match (node.lookup_namespace_uri(Some(prefix)), node.tag_name().namespace()) {
+        (Some(expected), Some(actual)) => expected == actual,
+        (None, None) => true,
+        _ => false,
+      }
+    }
+    None => node.tag_name().name() == name,
+  }
+}
+
+fn get_attribute<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Option<&'input str>
+where
+  'a: 'input,
+{
+  if let Some((prefix, local)) = name.split_once(':') {
+    let expected_namespace = node.lookup_namespace_uri(Some(prefix));
+    node
+      .attributes()
+      .find(|attr| attr.name() == local && expected_namespace.map_or(true, |ns| attr.namespace() == Some(ns)))
+      .map(|attr| attr.value())
+  } else {
+    node.attribute(name)
+  }
+}
+
 /// Convert an element and its children to markdown recursively
-fn convert_element_to_markdown(element: &scraper::ElementRef, verbose: u8) -> String {
+fn convert_element_to_markdown<'a, 'input>(node: Node<'a, 'input>, verbose: u8) -> String {
   let mut result = String::new();
 
-  for child in element.children() {
-    match child.value() {
-      Node::Element(elem) => {
-        let tag_name = elem.name();
-
-        if let Some(child_element) = scraper::ElementRef::wrap(child) {
-          match tag_name {
-            // Headings
-            "h1" => result.push_str(&format!("\n# {}\n\n", get_element_text(&child_element))),
-            "h2" => result.push_str(&format!("\n## {}\n\n", get_element_text(&child_element))),
-            "h3" => result.push_str(&format!("\n### {}\n\n", get_element_text(&child_element))),
-            "h4" => result.push_str(&format!("\n#### {}\n\n", get_element_text(&child_element))),
-            "h5" => result.push_str(&format!("\n##### {}\n\n", get_element_text(&child_element))),
-            "h6" => result.push_str(&format!("\n###### {}\n\n", get_element_text(&child_element))),
-
-            // Paragraphs
-            "p" => {
-              let content = convert_element_to_markdown(&child_element, verbose);
-              let trimmed = content.trim();
-              if !trimmed.is_empty() {
-                result.push_str(&format!("{trimmed}\n\n"));
-              }
-            }
-
-            // Text formatting
-            "strong" | "b" => result.push_str(&format!("**{}**", get_element_text(&child_element))),
-            "em" | "i" => result.push_str(&format!("_{}_", get_element_text(&child_element))),
-            "u" => result.push_str(&format!("_{}_", get_element_text(&child_element))),
-            "s" | "del" => result.push_str(&format!("~~{}~~", get_element_text(&child_element))),
-            "code" => result.push_str(&format!("`{}`", get_element_text(&child_element))),
-
-            // Lists
-            "ul" => {
+  for child in node.children() {
+    match child.node_type() {
+      NodeType::Element => {
+        if has_tag(child, "h1") {
+          result.push_str(&format!("\n# {}\n\n", get_element_text(child)));
+        } else if has_tag(child, "h2") {
+          result.push_str(&format!("\n## {}\n\n", get_element_text(child)));
+        } else if has_tag(child, "h3") {
+          result.push_str(&format!("\n### {}\n\n", get_element_text(child)));
+        } else if has_tag(child, "h4") {
+          result.push_str(&format!("\n#### {}\n\n", get_element_text(child)));
+        } else if has_tag(child, "h5") {
+          result.push_str(&format!("\n##### {}\n\n", get_element_text(child)));
+        } else if has_tag(child, "h6") {
+          result.push_str(&format!("\n###### {}\n\n", get_element_text(child)));
+        } else if has_tag(child, "p") {
+          let content = convert_element_to_markdown(child, verbose);
+          let trimmed = content.trim();
+          if !trimmed.is_empty() {
+            result.push_str(trimmed);
+            result.push_str("\n\n");
+          }
+        } else if has_tag(child, "strong") || has_tag(child, "b") {
+          result.push_str(&format!("**{}**", get_element_text(child)));
+        } else if has_tag(child, "em") || has_tag(child, "i") || has_tag(child, "u") {
+          result.push_str(&format!("_{}_", get_element_text(child)));
+        } else if has_tag(child, "s") || has_tag(child, "del") {
+          result.push_str(&format!("~~{}~~", get_element_text(child)));
+        } else if has_tag(child, "code") {
+          result.push_str(&format!("`{}`", get_element_text(child)));
+        } else if has_tag(child, "ul") {
+          result.push('\n');
+          for li in child.children().filter(|n| n.is_element() && has_tag(*n, "li")) {
+            let text = get_element_text(li);
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+              result.push_str("- ");
+              result.push_str(trimmed);
               result.push('\n');
-              for li in child_element.select(&Selector::parse("li").unwrap()) {
-                result.push_str(&format!("- {}\n", get_element_text(&li).trim()));
-              }
-              result.push('\n');
-            }
-            "ol" => {
-              result.push('\n');
-              for (i, li) in child_element.select(&Selector::parse("li").unwrap()).enumerate() {
-                result.push_str(&format!("{}. {}\n", i + 1, get_element_text(&li).trim()));
-              }
-              result.push('\n');
-            }
-
-            // Links
-            "a" => {
-              let text = get_element_text(&child_element);
-              let href = child_element.value().attr("href").unwrap_or("");
-              result.push_str(&format!("[{}]({})", text.trim(), href));
-            }
-
-            // Line breaks
-            "br" => result.push('\n'),
-            "hr" => result.push_str("\n---\n\n"),
-
-            // Code blocks
-            "pre" => {
-              let code = get_element_text(&child_element);
-              result.push_str(&format!("\n```\n{}\n```\n\n", code.trim()));
-            }
-
-            // Tables
-            "table" => {
-              result.push_str(&convert_table_to_markdown(&child_element));
-            }
-
-            // Confluence-specific macros
-            "ac:structured-macro" => {
-              result.push_str(&convert_macro_to_markdown(&child_element, verbose));
-            }
-
-            // Confluence task lists
-            "ac:task-list" => {
-              result.push_str(&convert_task_list_to_markdown(&child_element));
-            }
-
-            // Confluence images
-            "ac:image" => {
-              result.push_str(&convert_image_to_markdown(&child_element));
-            }
-
-            // Layout sections (just extract content)
-            "ac:layout" | "ac:layout-section" | "ac:layout-cell" | "ac:rich-text-body" => {
-              result.push_str(&convert_element_to_markdown(&child_element, verbose));
-            }
-
-            // Skip these Confluence-specific tags
-            "ri:url" | "ac:parameter" | "ac:task-id" | "ac:task-status" | "ac:task-body" => {
-              // For task-body, still extract the text
-              if tag_name == "ac:task-body" {
-                result.push_str(&get_element_text(&child_element));
-              }
-            }
-
-            // Span elements - just extract content
-            "span" => {
-              if let Some(emoji) = convert_span_emoji(&child_element, verbose) {
-                result.push_str(&emoji);
-              } else {
-                result.push_str(&convert_element_to_markdown(&child_element, verbose));
-              }
-            }
-
-            // Emojis
-            "ac:emoji" | "ac:emoticon" => {
-              result.push_str(&convert_emoji_to_markdown(&child_element, verbose));
-            }
-
-            // Default: recurse into children
-            _ => {
-              if verbose >= 3 {
-                eprintln!("[DEBUG] Unknown tag: {tag_name}");
-              }
-              result.push_str(&convert_element_to_markdown(&child_element, verbose));
             }
           }
+          result.push('\n');
+        } else if has_tag(child, "ol") {
+          result.push('\n');
+          for (index, li) in child
+            .children()
+            .filter(|n| n.is_element() && has_tag(*n, "li"))
+            .enumerate()
+          {
+            let text = get_element_text(li);
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+              result.push_str(&format!("{}. {}\n", index + 1, trimmed));
+            }
+          }
+          result.push('\n');
+        } else if has_tag(child, "a") {
+          let text = get_element_text(child);
+          let href = get_attribute(child, "href").unwrap_or("");
+          result.push_str(&format!("[{}]({})", text.trim(), href));
+        } else if has_tag(child, "br") {
+          result.push('\n');
+        } else if has_tag(child, "hr") {
+          result.push_str("\n---\n\n");
+        } else if has_tag(child, "pre") {
+          let code = get_element_text(child);
+          result.push_str("\n```\n");
+          result.push_str(code.trim());
+          result.push_str("\n```\n\n");
+        } else if has_tag(child, "table") {
+          result.push_str(&convert_table_to_markdown(child));
+        } else if has_tag(child, "ac:structured-macro") {
+          result.push_str(&convert_macro_to_markdown(child, verbose));
+        } else if has_tag(child, "ac:task-list") {
+          result.push_str(&convert_task_list_to_markdown(child));
+        } else if has_tag(child, "ac:image") {
+          result.push_str(&convert_image_to_markdown(child));
+        } else if has_tag(child, "ac:layout")
+          || has_tag(child, "ac:layout-section")
+          || has_tag(child, "ac:layout-cell")
+          || has_tag(child, "ac:rich-text-body")
+        {
+          result.push_str(&convert_element_to_markdown(child, verbose));
+        } else if has_tag(child, "ri:url")
+          || has_tag(child, "ac:parameter")
+          || has_tag(child, "ac:task-id")
+          || has_tag(child, "ac:task-status")
+          || has_tag(child, "ac:task-body")
+        {
+          if has_tag(child, "ac:task-body") {
+            result.push_str(&get_element_text(child));
+          }
+        } else if has_tag(child, "span") {
+          if let Some(emoji) = convert_span_emoji(child, verbose) {
+            result.push_str(&emoji);
+          } else {
+            result.push_str(&convert_element_to_markdown(child, verbose));
+          }
+        } else if has_tag(child, "ac:emoji") || has_tag(child, "ac:emoticon") {
+          result.push_str(&convert_emoji_to_markdown(child, verbose));
+        } else {
+          if verbose >= 3 {
+            if let Some(name) = qualified_name(child) {
+              eprintln!("[DEBUG] Unknown tag: {name}");
+            }
+          }
+          result.push_str(&convert_element_to_markdown(child, verbose));
         }
       }
-      Node::Text(text) => {
-        // Decode HTML entities and add text
-        let decoded = decode_html_entities(text);
-        result.push_str(&decoded);
+      NodeType::Text => {
+        if let Some(text) = child.text() {
+          let decoded = decode_html_entities(text);
+          result.push_str(&decoded);
+        }
       }
       _ => {
-        // Ignore comments, doctypes, etc.
+        // Ignore comments, doctypes, processing instructions, etc.
       }
     }
   }
@@ -163,16 +218,18 @@ fn convert_element_to_markdown(element: &scraper::ElementRef, verbose: u8) -> St
 }
 
 /// Get all text content from an element and its children
-fn get_element_text(element: &scraper::ElementRef) -> String {
+fn get_element_text<'a, 'input>(node: Node<'a, 'input>) -> String {
   let mut text = String::new();
 
-  for child in element.children() {
-    match child.value() {
-      Node::Text(t) => text.push_str(&decode_html_entities(t)),
-      Node::Element(_) => {
-        if let Some(child_elem) = scraper::ElementRef::wrap(child) {
-          text.push_str(&get_element_text(&child_elem));
+  for child in node.children() {
+    match child.node_type() {
+      NodeType::Text => {
+        if let Some(value) = child.text() {
+          text.push_str(&decode_html_entities(value));
         }
+      }
+      NodeType::Element => {
+        text.push_str(&get_element_text(child));
       }
       _ => {}
     }
@@ -182,43 +239,41 @@ fn get_element_text(element: &scraper::ElementRef) -> String {
 }
 
 /// Convert Confluence structured macros to markdown
-fn convert_macro_to_markdown(element: &scraper::ElementRef, verbose: u8) -> String {
-  let macro_name = element.value().attr("ac:name").unwrap_or("");
+fn convert_macro_to_markdown<'a, 'input>(element: Node<'a, 'input>, verbose: u8) -> String {
+  let macro_name = get_attribute(element, "ac:name").unwrap_or("");
 
   match macro_name {
     "toc" => "\n**Table of Contents**\n\n".to_string(),
     "panel" => {
-      // Extract rich text body if present - iterate children since namespaced
-      // elements aren't valid CSS selectors
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_element_to_markdown(&elem, verbose))
+        .map(|elem| convert_element_to_markdown(elem, verbose))
         .unwrap_or_else(|| get_element_text(element));
       format!("\n> {}\n\n", body.trim())
     }
     "note" | "info" | "warning" | "tip" => {
       let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
-        .map(|e| e.text().collect::<String>())
+        .map(get_element_text)
         .unwrap_or_default();
 
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_element_to_markdown(&elem, verbose))
+        .map(|elem| convert_element_to_markdown(elem, verbose))
         .unwrap_or_else(|| get_element_text(element));
 
       format_admonition_block(macro_name, title.trim(), body.trim())
     }
     "status" => {
       let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
-        .map(|e| e.text().collect::<String>())
+        .map(get_element_text)
         .unwrap_or_default();
       format!("`[{title}]`")
     }
     "expand" => {
       let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
-        .map(|e| e.text().collect::<String>())
+        .map(get_element_text)
         .unwrap_or_else(|| "Details".to_string());
 
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_element_to_markdown(&elem, verbose))
+        .map(|elem| convert_element_to_markdown(elem, verbose))
         .unwrap_or_else(|| get_element_text(element));
 
       format!(
@@ -228,19 +283,13 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef, verbose: u8) -> Stri
       )
     }
     "emoji" => {
-      let emoji_id = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji-id")
-        .map(|e| e.text().collect::<String>());
+      let emoji_id = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji-id").map(get_element_text);
 
       let result = emoji_id
         .as_deref()
-        .and_then(|id| emoji_id_to_unicode(id.trim(), verbose))
-        .or_else(|| {
-          find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji").map(|e| e.text().collect::<String>())
-        })
-        .or_else(|| {
-          find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "shortname")
-            .map(|e| e.text().collect::<String>())
-        })
+        .and_then(|id: &str| emoji_id_to_unicode(id.trim(), verbose))
+        .or_else(|| find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji").map(get_element_text))
+        .or_else(|| find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "shortname").map(get_element_text))
         .unwrap_or_default();
 
       if verbose >= 2 && !result.is_empty() {
@@ -248,11 +297,8 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef, verbose: u8) -> Stri
       }
       result
     }
-    "anchor" => String::new(), // Skip anchors
-    _ => {
-      // For unknown macros, just extract the text content
-      get_element_text(element)
-    }
+    "anchor" => String::new(),
+    _ => get_element_text(element),
   }
 }
 
@@ -292,57 +338,44 @@ fn format_admonition_block(macro_name: &str, title: &str, body: &str) -> String 
 }
 
 /// Find a child element by tag name (handles namespaced tags)
-fn find_child_by_tag<'a>(element: &'a scraper::ElementRef, tag_name: &str) -> Option<scraper::ElementRef<'a>> {
-  for child in element.children() {
-    if let Node::Element(elem) = child.value()
-      && elem.name() == tag_name
-    {
-      return scraper::ElementRef::wrap(child);
-    }
-  }
-  None
+fn find_child_by_tag<'a, 'input>(node: Node<'a, 'input>, tag_name: &str) -> Option<Node<'a, 'input>> {
+  node
+    .children()
+    .find(|child| child.is_element() && has_tag(*child, tag_name))
 }
 
 /// Find a child element by tag name and attribute value
-fn find_child_by_tag_and_attr<'a>(
-  element: &'a scraper::ElementRef,
+fn find_child_by_tag_and_attr<'a, 'input>(
+  node: Node<'a, 'input>,
   tag_name: &str,
   attr_name: &str,
   attr_value: &str,
-) -> Option<scraper::ElementRef<'a>> {
-  for child in element.children() {
-    if let Node::Element(elem) = child.value()
-      && elem.name() == tag_name
-      && let Some(child_elem) = scraper::ElementRef::wrap(child)
-      && child_elem.value().attr(attr_name) == Some(attr_value)
-    {
-      return Some(child_elem);
-    }
-  }
-  None
+) -> Option<Node<'a, 'input>> {
+  node.children().find(|child| {
+    child.is_element()
+      && has_tag(*child, tag_name)
+      && get_attribute(*child, attr_name).map_or(false, |value| value == attr_value)
+  })
 }
 
 /// Convert Confluence task list to markdown checkboxes
-fn convert_task_list_to_markdown(element: &scraper::ElementRef) -> String {
+fn convert_task_list_to_markdown<'a, 'input>(node: Node<'a, 'input>) -> String {
   let mut result = String::new();
 
-  // Iterate through children to find ac:task elements
-  for child in element.children() {
-    if let Node::Element(elem) = child.value()
-      && elem.name() == "ac:task"
-      && let Some(task) = scraper::ElementRef::wrap(child)
-    {
-      let status = find_child_by_tag(&task, "ac:task-status")
-        .map(|e| e.text().collect::<String>())
-        .unwrap_or_else(|| "incomplete".to_string());
+  for task in node
+    .children()
+    .filter(|child| child.is_element() && has_tag(*child, "ac:task"))
+  {
+    let status = find_child_by_tag(task, "ac:task-status")
+      .map(get_element_text)
+      .unwrap_or_else(|| "incomplete".to_string());
 
-      let body = find_child_by_tag(&task, "ac:task-body")
-        .map(|e| get_element_text(&e))
-        .unwrap_or_default();
+    let body = find_child_by_tag(task, "ac:task-body")
+      .map(get_element_text)
+      .unwrap_or_default();
 
-      let checkbox = if status.trim() == "complete" { "[x]" } else { "[ ]" };
-      result.push_str(&format!("- {} {}\n", checkbox, body.trim()));
-    }
+    let checkbox = if status.trim() == "complete" { "[x]" } else { "[ ]" };
+    result.push_str(&format!("- {} {}\n", checkbox, body.trim()));
   }
 
   result.push('\n');
@@ -350,13 +383,12 @@ fn convert_task_list_to_markdown(element: &scraper::ElementRef) -> String {
 }
 
 /// Convert Confluence image to markdown
-fn convert_image_to_markdown(element: &scraper::ElementRef) -> String {
-  // Try to find the image URL using child iteration
-  let url = find_child_by_tag(element, "ri:url")
-    .and_then(|e| e.value().attr("ri:value"))
+fn convert_image_to_markdown<'a, 'input>(node: Node<'a, 'input>) -> String {
+  let url = find_child_by_tag(node, "ri:url")
+    .and_then(|child| get_attribute(child, "ri:value"))
     .unwrap_or("");
 
-  let alt = element.value().attr("ac:alt").unwrap_or("image");
+  let alt = get_attribute(node, "ac:alt").unwrap_or("image");
 
   if !url.is_empty() {
     format!("\n![{alt}]({url})\n\n")
@@ -366,13 +398,10 @@ fn convert_image_to_markdown(element: &scraper::ElementRef) -> String {
 }
 
 /// Convert an emoji element to markdown by resolving its codepoint
-fn convert_emoji_to_markdown(element: &scraper::ElementRef, verbose: u8) -> String {
-  let emoji_id = element.value().attr("ac:emoji-id");
-  let shortcut = element.value().attr("ac:shortcut");
-  let shortname = element
-    .value()
-    .attr("ac:shortname")
-    .or_else(|| element.value().attr("ac:emoji-shortname"));
+fn convert_emoji_to_markdown<'a, 'input>(node: Node<'a, 'input>, verbose: u8) -> String {
+  let emoji_id = get_attribute(node, "ac:emoji-id");
+  let shortcut = get_attribute(node, "ac:shortcut");
+  let shortname = get_attribute(node, "ac:shortname").or_else(|| get_attribute(node, "ac:emoji-shortname"));
 
   if let Some(id) = emoji_id
     && let Some(emoji) = emoji_id_to_unicode(id, verbose)
@@ -387,17 +416,17 @@ fn convert_emoji_to_markdown(element: &scraper::ElementRef, verbose: u8) -> Stri
     if verbose >= 2 {
       eprintln!("[DEBUG] Emoji shortcut: {sc}");
     }
-    return sc.to_string();
+    return sc.to_owned();
   }
 
   if let Some(sn) = shortname {
     if verbose >= 2 {
       eprintln!("[DEBUG] Emoji shortname: {sn}");
     }
-    return sn.to_string();
+    return sn.to_owned();
   }
 
-  let text = get_element_text(element);
+  let text = get_element_text(node);
   if verbose >= 3 && text.trim().is_empty() {
     eprintln!("[DEBUG] Emoji element with no resolvable content");
   }
@@ -405,12 +434,10 @@ fn convert_emoji_to_markdown(element: &scraper::ElementRef, verbose: u8) -> Stri
 }
 
 /// Try to resolve emoji metadata stored on span elements
-fn convert_span_emoji(element: &scraper::ElementRef, verbose: u8) -> Option<String> {
-  let value = element.value();
-
-  let emoji_id = value.attr("data-emoji-id");
-  let emoji_shortname = value.attr("data-emoji-shortname");
-  let emoji_fallback = value.attr("data-emoji-fallback");
+fn convert_span_emoji<'a, 'input>(node: Node<'a, 'input>, verbose: u8) -> Option<String> {
+  let emoji_id = get_attribute(node, "data-emoji-id");
+  let emoji_shortname = get_attribute(node, "data-emoji-shortname");
+  let emoji_fallback = get_attribute(node, "data-emoji-fallback");
 
   let has_metadata = emoji_id.is_some() || emoji_shortname.is_some() || emoji_fallback.is_some();
 
@@ -431,7 +458,7 @@ fn convert_span_emoji(element: &scraper::ElementRef, verbose: u8) -> Option<Stri
     return Some(emoji);
   }
 
-  let text = get_element_text(element);
+  let text = get_element_text(node);
   if !text.trim().is_empty() {
     if verbose >= 2 {
       eprintln!("[DEBUG] Span emoji from text: {text}");
@@ -443,7 +470,7 @@ fn convert_span_emoji(element: &scraper::ElementRef, verbose: u8) -> Option<Stri
     if verbose >= 2 {
       eprintln!("[DEBUG] Span emoji from shortname/fallback: {shortname}");
     }
-    return Some(shortname.to_string());
+    return Some(shortname.to_owned());
   }
 
   if verbose >= 3 {
@@ -509,16 +536,20 @@ fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
 }
 
 /// Convert HTML table to markdown table
-fn convert_table_to_markdown(element: &scraper::ElementRef) -> String {
+fn convert_table_to_markdown<'a, 'input>(node: Node<'a, 'input>) -> String {
   let mut rows: Vec<Vec<String>> = Vec::new();
 
-  // Extract all rows
-  for tr in element.select(&Selector::parse("tr").unwrap()) {
+  for tr in node
+    .descendants()
+    .filter(|child| child.is_element() && has_tag(*child, "tr"))
+  {
     let mut cells: Vec<String> = Vec::new();
 
-    // Get cells (th or td)
-    for cell in tr.select(&Selector::parse("th, td").unwrap()) {
-      let text = get_element_text(&cell)
+    for cell in tr
+      .children()
+      .filter(|child| child.is_element() && (has_tag(*child, "th") || has_tag(*child, "td")))
+    {
+      let text = get_element_text(cell)
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -573,11 +604,9 @@ fn convert_table_to_markdown(element: &scraper::ElementRef) -> String {
     line
   }
 
-  // Write header row (or first row if no header)
   if let Some(first_row) = rows.first() {
     result.push_str(&format_row(first_row, &column_widths));
 
-    // Write separator that matches the header width for prettier output
     result.push('|');
     for width in &column_widths {
       let dash_count = (*width).max(3);
@@ -589,7 +618,6 @@ fn convert_table_to_markdown(element: &scraper::ElementRef) -> String {
     result.push('\n');
   }
 
-  // Write remaining rows
   for row in rows.iter().skip(1) {
     result.push_str(&format_row(row, &column_widths));
   }
@@ -1050,9 +1078,14 @@ mod tests {
   #[test]
   fn test_get_element_text_recursive() {
     let input = "<div><span>Nested <strong>text</strong> content</span></div>";
-    let document = Html::parse_document(input);
-    let div = document.select(&Selector::parse("div").unwrap()).next().unwrap();
-    let text = get_element_text(&div);
+    let wrapped = wrap_storage_content(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let div = document
+      .root_element()
+      .descendants()
+      .find(|node| node.is_element() && has_tag(*node, "div"))
+      .unwrap();
+    let text = get_element_text(div);
     assert_eq!(text, "Nested text content");
   }
 

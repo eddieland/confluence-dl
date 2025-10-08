@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use scraper::{Html, Selector};
+use roxmltree::{Document, Node};
 
 use crate::confluence::ConfluenceApi;
 
@@ -21,27 +21,74 @@ pub struct ImageReference {
   pub alt_text: String,
 }
 
+const AC_NAMESPACE: &str = "http://atlassian.com/content";
+const RI_NAMESPACE: &str = "http://atlassian.com/resource/identifier";
+const EMOJI_NAMESPACE: &str = "http://atlassian.com/emoji";
+
+fn wrap_storage_content(storage_content: &str) -> String {
+  format!(
+    "<confluence-root xmlns:ac=\"{AC_NAMESPACE}\" xmlns:ri=\"{RI_NAMESPACE}\" xmlns:emoji=\"{EMOJI_NAMESPACE}\">{storage_content}</confluence-root>"
+  )
+}
+
+fn has_tag<'a, 'input>(node: Node<'a, 'input>, name: &str) -> bool {
+  if !node.is_element() {
+    return false;
+  }
+
+  match name.split_once(':') {
+    Some((prefix, local)) => {
+      if node.tag_name().name() != local {
+        return false;
+      }
+
+      match (node.lookup_namespace_uri(Some(prefix)), node.tag_name().namespace()) {
+        (Some(expected), Some(actual)) => expected == actual,
+        (None, None) => true,
+        _ => false,
+      }
+    }
+    None => node.tag_name().name() == name,
+  }
+}
+
+fn get_attribute<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Option<&'input str>
+where
+  'a: 'input,
+{
+  if let Some((prefix, local)) = name.split_once(':') {
+    let expected_namespace = node.lookup_namespace_uri(Some(prefix));
+    node
+      .attributes()
+      .find(|attr| attr.name() == local && expected_namespace.map_or(true, |ns| attr.namespace() == Some(ns)))
+      .map(|attr| attr.value())
+  } else {
+    node.attribute(name)
+  }
+}
+
 /// Extract image references from Confluence storage format content
 ///
 /// Parses the HTML/XML content to find `<ac:image>` tags and extracts
 /// the attachment filenames and alt text.
 pub fn extract_image_references(storage_content: &str) -> Result<Vec<ImageReference>> {
-  let document = Html::parse_document(storage_content);
+  let wrapped = wrap_storage_content(storage_content);
+  let document =
+    Document::parse(&wrapped).context("failed to parse Confluence storage content while extracting images")?;
   let mut images = Vec::new();
 
-  // Select all ac:image elements
-  let image_selector = Selector::parse("ac\\:image").unwrap();
+  for image in document
+    .root_element()
+    .descendants()
+    .filter(|node| node.is_element() && has_tag(*node, "ac:image"))
+  {
+    let alt_text = get_attribute(image, "ac:alt").unwrap_or("image").to_string();
 
-  for image_elem in document.select(&image_selector) {
-    // Get alt text from ac:alt attribute
-    let alt_text = image_elem.value().attr("ac:alt").unwrap_or("image").to_string();
-
-    // Look for ri:attachment child element with ri:filename attribute
-    for child in image_elem.children() {
-      if let Some(child_elem) = scraper::ElementRef::wrap(child)
-        && child_elem.value().name() == "ri:attachment"
-        && let Some(filename) = child_elem.value().attr("ri:filename")
-      {
+    for attachment in image
+      .children()
+      .filter(|child| child.is_element() && has_tag(*child, "ri:attachment"))
+    {
+      if let Some(filename) = get_attribute(attachment, "ri:filename") {
         images.push(ImageReference {
           filename: filename.to_string(),
           alt_text: alt_text.clone(),
