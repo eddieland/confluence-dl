@@ -430,8 +430,30 @@ fn download_page_tree(
     .map(|s| s.value.as_str())
     .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
 
+  // Generate filename from page title (needed for raw XML saving)
+  let filename = sanitize_filename(&page.title);
+
+  // Save raw Confluence storage format BEFORE parsing if requested
+  // This ensures we can debug parse failures
+  if cli.output.save_raw {
+    let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
+    if let Some(parent) = raw_output_path.parent() {
+      fs::create_dir_all(parent)?;
+    }
+    fs::write(&raw_output_path, storage_content)?;
+
+    if cli.behavior.verbose > 0 {
+      println!(
+        "    {} {}",
+        colors.dimmed("→"),
+        colors.dimmed(format!("Raw: {}", raw_output_path.display()))
+      );
+    }
+  }
+
   // Convert to Markdown
-  let mut markdown = markdown::storage_to_markdown(storage_content, cli.behavior.verbose)?;
+  let mut markdown = markdown::storage_to_markdown(storage_content, cli.behavior.verbose)
+    .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
 
   // Download images if requested
   if cli.images_links.download_images {
@@ -451,8 +473,7 @@ fn download_page_tree(
     }
   }
 
-  // Generate filename from page title
-  let filename = sanitize_filename(&page.title);
+  // Generate output path
   let output_path = output_dir.join(format!("{filename}.md"));
 
   // Check if file exists and handle overwrite
@@ -475,19 +496,7 @@ fn download_page_tree(
       println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
     }
 
-    // Save raw Confluence storage format if requested
-    if cli.output.save_raw {
-      let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
-      fs::write(&raw_output_path, storage_content)?;
-
-      if cli.behavior.verbose > 0 {
-        println!(
-          "    {} {}",
-          colors.dimmed("→"),
-          colors.dimmed(format!("Raw: {}", raw_output_path.display()))
-        );
-      }
-    }
+    // Raw XML was already saved before parsing (if requested)
   }
 
   // Download child pages recursively

@@ -4,11 +4,13 @@
 //! format, downloading them, and updating markdown links to reference local
 //! files.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use scraper::{Html, Selector};
+use roxmltree::{Document, Node};
+
+const SYNTHETIC_NS_BASE: &str = "https://confluence.example/";
 
 use crate::confluence::ConfluenceApi;
 
@@ -26,24 +28,23 @@ pub struct ImageReference {
 /// Parses the HTML/XML content to find `<ac:image>` tags and extracts
 /// the attachment filenames and alt text.
 pub fn extract_image_references(storage_content: &str) -> Result<Vec<ImageReference>> {
-  let document = Html::parse_document(storage_content);
+  // Pre-process: Replace HTML entities with Unicode characters
+  // roxmltree only supports XML's 5 predefined entities, not HTML entities
+  let preprocessed = preprocess_html_entities(storage_content);
+  let wrapped = wrap_with_namespaces(&preprocessed);
+  let document = Document::parse(&wrapped).context("Failed to parse Confluence storage content for images")?;
   let mut images = Vec::new();
 
-  // Select all ac:image elements
-  let image_selector = Selector::parse("ac\\:image").unwrap();
+  for image_elem in document.descendants().filter(|node| matches_tag(*node, "ac:image")) {
+    let alt_text = get_attribute(image_elem, "ac:alt").unwrap_or_else(|| "image".to_string());
 
-  for image_elem in document.select(&image_selector) {
-    // Get alt text from ac:alt attribute
-    let alt_text = image_elem.value().attr("ac:alt").unwrap_or("image").to_string();
-
-    // Look for ri:attachment child element with ri:filename attribute
-    for child in image_elem.children() {
-      if let Some(child_elem) = scraper::ElementRef::wrap(child)
-        && child_elem.value().name() == "ri:attachment"
-        && let Some(filename) = child_elem.value().attr("ri:filename")
-      {
+    for attachment in image_elem
+      .children()
+      .filter(|child| matches_tag(*child, "ri:attachment"))
+    {
+      if let Some(filename) = get_attribute(attachment, "ri:filename") {
         images.push(ImageReference {
-          filename: filename.to_string(),
+          filename,
           alt_text: alt_text.clone(),
         });
       }
@@ -51,6 +52,143 @@ pub fn extract_image_references(storage_content: &str) -> Result<Vec<ImageRefere
   }
 
   Ok(images)
+}
+
+fn split_qualified_name(name: &str) -> (Option<&str>, &str) {
+  if let Some((prefix, local)) = name.split_once(':') {
+    (Some(prefix), local)
+  } else {
+    (None, name)
+  }
+}
+
+fn matches_tag<'a, 'input>(node: Node<'a, 'input>, name: &str) -> bool {
+  if !node.is_element() {
+    return false;
+  }
+
+  let (expected_prefix, expected_name) = split_qualified_name(name);
+  let tag = node.tag_name();
+  if tag.name() != expected_name {
+    return false;
+  }
+
+  let expected_namespace = expected_prefix.map(|prefix| format!("{SYNTHETIC_NS_BASE}{prefix}"));
+
+  match (expected_namespace.as_deref(), tag.namespace()) {
+    (Some(expected), Some(actual)) => actual == expected,
+    (None, None) => true,
+    (Some(_), None) | (None, Some(_)) => false,
+  }
+}
+
+fn get_attribute<'a, 'input>(node: Node<'a, 'input>, attr_name: &str) -> Option<String> {
+  if !node.is_element() {
+    return None;
+  }
+
+  let (expected_prefix, expected_name) = split_qualified_name(attr_name);
+  let expected_namespace = expected_prefix.map(|prefix| format!("{SYNTHETIC_NS_BASE}{prefix}"));
+
+  for attr in node.attributes() {
+    if attr.name() != expected_name {
+      continue;
+    }
+
+    let namespace_matches = match (expected_namespace.as_deref(), attr.namespace()) {
+      (Some(expected), Some(actual)) => actual == expected,
+      (None, None) => true,
+      (Some(_), None) | (None, Some(_)) => false,
+    };
+
+    if namespace_matches {
+      return Some(attr.value().to_string());
+    }
+  }
+  None
+}
+
+fn wrap_with_namespaces(storage_content: &str) -> String {
+  let mut prefixes = BTreeSet::new();
+
+  for segment in storage_content.split('<').skip(1) {
+    let mut segment = segment;
+    if let Some(idx) = segment.find('>') {
+      segment = &segment[..idx];
+    }
+
+    let segment = segment.trim_start_matches('/');
+
+    if let Some((prefix, _)) = segment.split_once(':')
+      && is_valid_prefix(prefix)
+    {
+      prefixes.insert(prefix.to_string());
+    }
+
+    for attr in segment.split_whitespace() {
+      if let Some((name, _)) = attr.split_once('=')
+        && let Some((prefix, _)) = name.split_once(':')
+        && is_valid_prefix(prefix)
+      {
+        prefixes.insert(prefix.to_string());
+      }
+    }
+  }
+
+  let mut result = String::from("<cdl-root");
+  for prefix in prefixes {
+    result.push_str(" xmlns:");
+    result.push_str(&prefix);
+    result.push_str("=\"");
+    result.push_str(SYNTHETIC_NS_BASE);
+    result.push_str(&prefix);
+    result.push('"');
+  }
+  result.push('>');
+  result.push_str(storage_content);
+  result.push_str("</cdl-root>");
+  result
+}
+
+fn is_valid_prefix(prefix: &str) -> bool {
+  if prefix.is_empty() {
+    return false;
+  }
+  prefix
+    .chars()
+    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Replace common HTML entities with their Unicode characters before XML
+/// parsing roxmltree only recognizes XML's 5 predefined entities (&lt; &gt;
+/// &amp; &quot; &apos;) so we need to convert HTML entities to literal
+/// characters
+fn preprocess_html_entities(text: &str) -> String {
+  text
+    .replace("&nbsp;", "\u{00A0}") // non-breaking space
+    .replace("&ndash;", "\u{2013}") // en dash
+    .replace("&mdash;", "\u{2014}") // em dash
+    .replace("&ldquo;", "\u{201C}") // left double quote
+    .replace("&rdquo;", "\u{201D}") // right double quote
+    .replace("&lsquo;", "\u{2018}") // left single quote
+    .replace("&rsquo;", "\u{2019}") // right single quote
+    .replace("&hellip;", "\u{2026}") // horizontal ellipsis
+    .replace("&bull;", "\u{2022}") // bullet
+    .replace("&middot;", "\u{00B7}") // middle dot
+    .replace("&deg;", "\u{00B0}") // degree sign
+    .replace("&copy;", "\u{00A9}") // copyright
+    .replace("&reg;", "\u{00AE}") // registered trademark
+    .replace("&trade;", "\u{2122}") // trademark
+    .replace("&times;", "\u{00D7}") // multiplication sign
+    .replace("&divide;", "\u{00F7}") // division sign
+    .replace("&plusmn;", "\u{00B1}") // plus-minus sign
+    .replace("&ne;", "\u{2260}") // not equal
+    .replace("&le;", "\u{2264}") // less than or equal
+    .replace("&ge;", "\u{2265}") // greater than or equal
+    .replace("&larr;", "\u{2190}") // leftwards arrow
+    .replace("&rarr;", "\u{2192}") // rightwards arrow
+    .replace("&uarr;", "\u{2191}") // upwards arrow
+    .replace("&darr;", "\u{2193}") // downwards arrow
 }
 
 /// Download images for a page
