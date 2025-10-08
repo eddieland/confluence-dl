@@ -60,12 +60,24 @@ fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
         let local_name = tag.name();
 
         match local_name {
-          "h1" => result.push_str(&format!("\n# {}\n\n", get_element_text(child))),
-          "h2" => result.push_str(&format!("\n## {}\n\n", get_element_text(child))),
-          "h3" => result.push_str(&format!("\n### {}\n\n", get_element_text(child))),
-          "h4" => result.push_str(&format!("\n#### {}\n\n", get_element_text(child))),
-          "h5" => result.push_str(&format!("\n##### {}\n\n", get_element_text(child))),
-          "h6" => result.push_str(&format!("\n###### {}\n\n", get_element_text(child))),
+          "h1" => result.push_str(&format!("\n# {}\n\n", convert_node_to_markdown(child, verbose).trim())),
+          "h2" => result.push_str(&format!("\n## {}\n\n", convert_node_to_markdown(child, verbose).trim())),
+          "h3" => result.push_str(&format!(
+            "\n### {}\n\n",
+            convert_node_to_markdown(child, verbose).trim()
+          )),
+          "h4" => result.push_str(&format!(
+            "\n#### {}\n\n",
+            convert_node_to_markdown(child, verbose).trim()
+          )),
+          "h5" => result.push_str(&format!(
+            "\n##### {}\n\n",
+            convert_node_to_markdown(child, verbose).trim()
+          )),
+          "h6" => result.push_str(&format!(
+            "\n###### {}\n\n",
+            convert_node_to_markdown(child, verbose).trim()
+          )),
 
           "p" => {
             let content = convert_node_to_markdown(child, verbose);
@@ -75,16 +87,16 @@ fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
             }
           }
 
-          "strong" | "b" => result.push_str(&format!("**{}**", get_element_text(child))),
-          "em" | "i" => result.push_str(&format!("_{}_", get_element_text(child))),
-          "u" => result.push_str(&format!("_{}_", get_element_text(child))),
-          "s" | "del" => result.push_str(&format!("~~{}~~", get_element_text(child))),
-          "code" => result.push_str(&format!("`{}`", get_element_text(child))),
+          "strong" | "b" => result.push_str(&format!("**{}**", convert_node_to_markdown(child, verbose))),
+          "em" | "i" => result.push_str(&format!("_{}_", convert_node_to_markdown(child, verbose))),
+          "u" => result.push_str(&format!("_{}_", convert_node_to_markdown(child, verbose))),
+          "s" | "del" => result.push_str(&format!("~~{}~~", convert_node_to_markdown(child, verbose))),
+          "code" => result.push_str(&format!("`{}`", convert_node_to_markdown(child, verbose))),
 
           "ul" => {
             result.push('\n');
             for li in child.children().filter(|n| matches_tag(*n, "li")) {
-              let item = get_element_text(li).trim().to_string();
+              let item = convert_node_to_markdown(li, verbose).trim().to_string();
               result.push_str(&format!("- {item}\n"));
             }
             result.push('\n');
@@ -92,14 +104,14 @@ fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           "ol" => {
             result.push('\n');
             for (index, li) in child.children().filter(|n| matches_tag(*n, "li")).enumerate() {
-              let item = get_element_text(li).trim().to_string();
+              let item = convert_node_to_markdown(li, verbose).trim().to_string();
               result.push_str(&format!("{}. {item}\n", index + 1));
             }
             result.push('\n');
           }
 
           "a" => {
-            let text = get_element_text(child);
+            let text = convert_node_to_markdown(child, verbose);
             let href = get_attribute(child, "href").unwrap_or_default();
             result.push_str(&format!("[{}]({})", text.trim(), href));
           }

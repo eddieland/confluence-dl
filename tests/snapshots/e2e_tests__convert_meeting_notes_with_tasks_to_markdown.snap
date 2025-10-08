@@ -2,23 +2,23 @@
 source: tests/e2e_tests.rs
 expression: markdown
 ---
-##  Date
+## 🗓 Date
 
-##  Participants
+## 👥 Participants
 
 - 
 
-##  Goals
+## 🥅 Goals
 
 List goals for this meeting
 
-##  Discussion topics
+## 🗣 Discussion topics
 
 | Time  | Topic          |
 | ----- | -------------- |
 | 10:00 | Project update |
 
-##  Action items
+## ✅ Action items
 
 - [ ] Review architecture proposal
 - [x] Update documentation

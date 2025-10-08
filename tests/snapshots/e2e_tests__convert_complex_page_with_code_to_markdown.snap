@@ -10,8 +10,8 @@ This API provides access to our services.
 
 ## Endpoints
 
-- /api/users - User management
-- /api/posts - Content management
+- `/api/users` - User management
+- `/api/posts` - Content management
 
 ## Authentication
 
