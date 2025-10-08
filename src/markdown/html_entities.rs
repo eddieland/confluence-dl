@@ -37,7 +37,9 @@ fn replace_html_entities(text: &str, entities: &[(&'static str, &'static str)], 
         index += entity.len();
 
         if decode_numeric {
-          if let Some((nested_entity, nested_replacement)) = match_named_entity_following_amp(&text[index..], entities)
+          if replacement == "&"
+            && let Some((nested_entity, nested_replacement)) =
+              match_named_entity_following_amp(&text[index..], entities)
           {
             // Replace the `&` we just inserted with the decoded named entity.
             result.pop();
