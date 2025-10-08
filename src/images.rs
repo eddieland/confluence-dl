@@ -60,7 +60,7 @@ where
     let expected_namespace = node.lookup_namespace_uri(Some(prefix));
     node
       .attributes()
-      .find(|attr| attr.name() == local && expected_namespace.map_or(true, |ns| attr.namespace() == Some(ns)))
+      .find(|attr| attr.name() == local && expected_namespace.is_none_or(|ns| attr.namespace() == Some(ns)))
       .map(|attr| attr.value())
   } else {
     node.attribute(name)

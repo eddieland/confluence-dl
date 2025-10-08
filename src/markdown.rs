@@ -82,7 +82,7 @@ where
     let expected_namespace = node.lookup_namespace_uri(Some(prefix));
     node
       .attributes()
-      .find(|attr| attr.name() == local && expected_namespace.map_or(true, |ns| attr.namespace() == Some(ns)))
+      .find(|attr| attr.name() == local && expected_namespace.is_none_or(|ns| attr.namespace() == Some(ns)))
       .map(|attr| attr.value())
   } else {
     node.attribute(name)
@@ -194,10 +194,10 @@ fn convert_element_to_markdown<'a, 'input>(node: Node<'a, 'input>, verbose: u8) 
         } else if has_tag(child, "ac:emoji") || has_tag(child, "ac:emoticon") {
           result.push_str(&convert_emoji_to_markdown(child, verbose));
         } else {
-          if verbose >= 3 {
-            if let Some(name) = qualified_name(child) {
-              eprintln!("[DEBUG] Unknown tag: {name}");
-            }
+          if verbose >= 3
+            && let Some(name) = qualified_name(child)
+          {
+            eprintln!("[DEBUG] Unknown tag: {name}");
           }
           result.push_str(&convert_element_to_markdown(child, verbose));
         }
@@ -352,9 +352,7 @@ fn find_child_by_tag_and_attr<'a, 'input>(
   attr_value: &str,
 ) -> Option<Node<'a, 'input>> {
   node.children().find(|child| {
-    child.is_element()
-      && has_tag(*child, tag_name)
-      && get_attribute(*child, attr_name).map_or(false, |value| value == attr_value)
+    child.is_element() && has_tag(*child, tag_name) && (get_attribute(*child, attr_name) == Some(attr_value))
   })
 }
 
