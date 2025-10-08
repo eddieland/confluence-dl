@@ -217,9 +217,9 @@ pub struct ImagesLinksOptions {
 /// Performance options
 #[derive(Debug, Parser)]
 pub struct PerformanceOptions {
-  /// Number of parallel downloads
-  #[arg(long, default_value = "4", value_name = "N")]
-  pub parallel: usize,
+  /// Number of parallel downloads (`-1` uses available cores)
+  #[arg(long, default_value = "4", value_name = "N", allow_negative_numbers = true)]
+  pub parallel: isize,
 
   /// Max requests per second
   #[arg(long, default_value = "10", value_name = "N")]
@@ -228,6 +228,29 @@ pub struct PerformanceOptions {
   /// Request timeout in seconds
   #[arg(long, default_value = "30", value_name = "SECONDS")]
   pub timeout: u64,
+}
+
+impl PerformanceOptions {
+  /// Resolve the parallel download limit into a concrete positive value.
+  pub fn resolved_parallel(&self) -> usize {
+    match self.parallel {
+      value if value > 0 => value as usize,
+      -1 => std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
+      _ => 1, // Validation should prevent other values.
+    }
+  }
+
+  /// Human-readable label describing the parallel setting.
+  pub fn parallel_label(&self) -> String {
+    match self.parallel {
+      -1 => {
+        let resolved = self.resolved_parallel();
+        format!("auto ({resolved})")
+      }
+      value if value > 0 => value.to_string(),
+      _ => "1".to_string(),
+    }
+  }
 }
 
 impl Cli {
@@ -265,6 +288,10 @@ impl Cli {
     // Check for conflicting options
     if self.page.max_depth.is_some() && !self.page.children {
       return Err("--max-depth requires --children".to_string());
+    }
+
+    if self.performance.parallel == 0 || self.performance.parallel < -1 {
+      return Err("--parallel must be at least 1 or -1 to use available cores".to_string());
     }
 
     if self.performance.rate_limit == 0 {
@@ -428,6 +455,148 @@ mod tests {
     let result = cli.validate();
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("--max-depth requires --children"));
+  }
+
+  #[test]
+  fn test_cli_validation_parallel_must_be_positive_or_auto() {
+    let cli = Cli {
+      page_input: Some("https://example.com/page/123".to_string()),
+      command: None,
+      auth: AuthOptions {
+        url: None,
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: "./output".to_string(),
+        overwrite: false,
+        save_raw: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: false,
+        color: ColorOption::Auto,
+      },
+      page: PageOptions {
+        children: false,
+        max_depth: None,
+        attachments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: true,
+        images_dir: "images".to_string(),
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: 0,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let result = cli.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("--parallel must be at least 1 or -1"));
+  }
+
+  #[test]
+  fn test_cli_validation_parallel_auto_allowed() {
+    let cli = Cli {
+      page_input: Some("https://example.com/page/123".to_string()),
+      command: None,
+      auth: AuthOptions {
+        url: None,
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: "./output".to_string(),
+        overwrite: false,
+        save_raw: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: false,
+        color: ColorOption::Auto,
+      },
+      page: PageOptions {
+        children: false,
+        max_depth: None,
+        attachments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: true,
+        images_dir: "images".to_string(),
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: -1,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    assert!(cli.validate().is_ok());
+  }
+
+  #[test]
+  fn test_cli_validation_parallel_negative_invalid() {
+    let cli = Cli {
+      page_input: Some("https://example.com/page/123".to_string()),
+      command: None,
+      auth: AuthOptions {
+        url: None,
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: "./output".to_string(),
+        overwrite: false,
+        save_raw: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: false,
+        color: ColorOption::Auto,
+      },
+      page: PageOptions {
+        children: false,
+        max_depth: None,
+        attachments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: true,
+        images_dir: "images".to_string(),
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: -2,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let result = cli.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("--parallel must be at least 1 or -1"));
+  }
+
+  #[test]
+  fn test_cli_parallel_auto_parse() {
+    use clap::Parser;
+
+    let cli = Cli::try_parse_from([
+      "confluence-dl",
+      "--parallel",
+      "-1",
+      "https://example.com/wiki/pages/123",
+    ])
+    .unwrap();
+
+    assert_eq!(cli.performance.parallel, -1);
   }
 
   #[test]

@@ -269,7 +269,7 @@ Remove the extracted files when you're done if you don't need them locally.
 
 ### Performance
 
-- `--parallel <N>`: Number of parallel downloads (default: 4)
+- `--parallel <N>`: Number of parallel downloads (default: 4, use `-1` for available cores)
 - `--rate-limit <N>`: Max requests per second (default: 10)
 - `--timeout <SECONDS>`: Request timeout (default: 30)
 
