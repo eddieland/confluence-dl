@@ -283,11 +283,14 @@ fn download_page_tree(
 
   // Check if file exists and handle overwrite
   if output_path.exists() && !cli.output.overwrite {
-    eprintln!(
-      "{} File already exists: {}. Use --overwrite to replace it.",
-      colors.warning("⚠"),
-      colors.path(output_path.display())
+    let message = format!(
+      "File already exists: {}. Use --overwrite to replace it.",
+      output_path.display()
     );
+
+    eprintln!("{} {}", colors.error("✗"), colors.error(&message));
+
+    anyhow::bail!(message);
   } else {
     // Create parent directory
     if let Some(parent) = output_path.parent() {
