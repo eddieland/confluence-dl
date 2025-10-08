@@ -41,6 +41,7 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) 
 
       format_admonition_block(&macro_name, title.trim(), body.trim())
     }
+    "code" | "code-block" => format_code_block(element, verbose),
     "status" => {
       let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
         .map(get_element_text)
@@ -117,6 +118,40 @@ fn format_admonition_block(macro_name: &str, title: &str, body: &str) -> String 
   }
 
   result.push_str("\n\n");
+  result
+}
+
+/// Convert Confluence code macros to fenced code blocks.
+fn format_code_block(element: Node, verbose: u8) -> String {
+  let language = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "language")
+    .map(get_element_text)
+    .unwrap_or_default();
+
+  if verbose >= 2 && !language.trim().is_empty() {
+    debug!("Code block language: {}", language.trim());
+  }
+
+  let body = find_child_by_tag(element, "ac:plain-text-body")
+    .map(get_element_text)
+    .or_else(|| find_child_by_tag(element, "ac:rich-text-body").map(get_element_text))
+    .unwrap_or_else(|| get_element_text(element));
+
+  let mut result = String::new();
+  result.push('\n');
+  result.push_str("```");
+  let trimmed_language = language.trim();
+  if !trimmed_language.is_empty() {
+    result.push_str(trimmed_language);
+  }
+  result.push('\n');
+
+  let trimmed_body = body.trim_matches(|c| matches!(c, '\n' | '\r'));
+  result.push_str(trimmed_body);
+  if !trimmed_body.ends_with('\n') && !trimmed_body.is_empty() {
+    result.push('\n');
+  }
+
+  result.push_str("```\n\n");
   result
 }
 
@@ -242,6 +277,51 @@ mod tests {
       .unwrap();
     let output = convert_macro_to_markdown(macro_node, &simple_convert_node, 0);
     assert!(output.contains("**Table of Contents**"));
+  }
+
+  #[test]
+  fn test_convert_code_macro_with_language() {
+    let input = r#"
+      <ac:structured-macro ac:name="code">
+        <ac:parameter ac:name="language">rust</ac:parameter>
+        <ac:plain-text-body><![CDATA[fn main() {
+  println!("hi");
+}
+]]></ac:plain-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, 0);
+
+    let expected = "\n```rust\nfn main() {\n  println!(\"hi\");\n}\n```\n\n";
+    assert_eq!(output, expected);
+  }
+
+  #[test]
+  fn test_convert_code_macro_without_language() {
+    let input = r#"
+      <ac:structured-macro ac:name="code">
+        <ac:plain-text-body><![CDATA[line 1
+line 2]]></ac:plain-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, 0);
+
+    let expected = "\n```\nline 1\nline 2\n```\n\n";
+    assert_eq!(output, expected);
   }
 
   #[test]

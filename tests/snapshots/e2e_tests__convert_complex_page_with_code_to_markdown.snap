@@ -17,13 +17,16 @@ This API provides access to our services.
 
 Use **API tokens** for authentication.
 
-  curl -H "Authorization: Bearer TOKEN" https://api.example.com/users
+```
+curl -H "Authorization: Bearer TOKEN" https://api.example.com/users
+```
 
 ## Code Examples
 
-  python
-  import requests
+```python
+import requests
 
 def get_users():
     response = requests.get('https://api.example.com/users')
     return response.json()
+```
