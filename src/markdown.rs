@@ -125,6 +125,9 @@ fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           }
 
           "table" => result.push_str(&convert_table_to_markdown(child)),
+          "link" if matches_tag(child, "ac:link") => {
+            result.push_str(&convert_confluence_link_to_markdown(child, verbose));
+          }
           "structured-macro" if matches_tag(child, "ac:structured-macro") => {
             result.push_str(&convert_macro_to_markdown(child, verbose));
           }
@@ -484,6 +487,46 @@ fn convert_image_to_markdown(element: Node) -> String {
   } else {
     format!("\n![{alt}]()\n\n")
   }
+}
+
+/// Convert Confluence link to markdown
+///
+/// Handles user mentions (<ac:link><ri:user .../></ac:link>) and internal page
+/// links
+fn convert_confluence_link_to_markdown(element: Node, verbose: u8) -> String {
+  // Check for user mention
+  if let Some(user_node) = find_child_by_tag(element, "ri:user") {
+    let account_id = get_attribute(user_node, "ri:account-id").unwrap_or_default();
+
+    if verbose >= 2 {
+      eprintln!("[DEBUG] User mention: account_id={account_id}");
+    }
+
+    // Format as @mention with account ID as fallback
+    // In the future, we could look up display names via API
+    return format!("@user:{account_id}");
+  }
+
+  // Check for page link
+  if let Some(page_node) = find_child_by_tag(element, "ri:page") {
+    let title = get_attribute(page_node, "ri:content-title").unwrap_or_default();
+
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Page link: title={title}");
+    }
+
+    // Format as wiki-style link
+    return format!("[[{title}]]");
+  }
+
+  // Fall back to regular link handling if it has an href
+  let text = get_element_text(element);
+  if let Some(href) = get_attribute(element, "href") {
+    return format!("[{text}]({href})");
+  }
+
+  // If no special handling matched, just return the text content
+  text
 }
 
 /// Convert an emoji element to markdown by resolving its codepoint
