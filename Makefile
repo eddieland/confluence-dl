@@ -71,19 +71,19 @@ cloc: ## Count lines of code using Docker
 
 .PHONY: coverage
 coverage: ## Run code coverage
-	cargo llvm-cov nextest --all-features
+	cargo llvm-cov nextest --all-features --all-targets
 
 .PHONY: coverage-html
 coverage-html: ## Generate HTML coverage report
-	cargo llvm-cov nextest --all-features --html
+	cargo llvm-cov nextest --all-features --all-targets --html
 
 .PHONY: coverage-open
 coverage-open: ## Generate HTML coverage report and open it in browser
-	cargo llvm-cov nextest --all-features --html --open
+	cargo llvm-cov nextest --all-features --all-targets --html --open
 
 .PHONY: coverage-report
 coverage-report: ## Generate LCOV report
-	cargo llvm-cov nextest --all-features --lcov --output-path lcov.info
+	cargo llvm-cov nextest --all-features --all-targets --lcov --output-path lcov.info
 
 ### Build
 
