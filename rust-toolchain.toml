@@ -6,4 +6,5 @@ components = [
     "rust-src",
     "llvm-tools-preview"
 ]
+targets = ["x86_64-unknown-linux-musl"]
 profile = "default"
