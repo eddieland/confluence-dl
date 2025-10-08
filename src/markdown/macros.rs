@@ -181,17 +181,21 @@ pub fn convert_task_list_to_markdown(element: Node) -> String {
 
 /// Convert Confluence image to markdown.
 pub fn convert_image_to_markdown(element: Node) -> String {
-  let url = find_child_by_tag(element, "ri:url")
-    .and_then(|e| get_attribute(e, "ri:value"))
-    .unwrap_or_default();
-
   let alt = get_attribute(element, "ac:alt").unwrap_or_else(|| "image".to_string());
 
-  if !url.is_empty() {
-    format!("\n![{alt}]({url})\n\n")
-  } else {
-    format!("\n![{alt}]()\n\n")
+  if let Some(url) = find_child_by_tag(element, "ri:url").and_then(|e| get_attribute(e, "ri:value"))
+    && !url.is_empty()
+  {
+    return format!("\n![{alt}]({url})\n\n");
   }
+
+  if let Some(filename) = find_child_by_tag(element, "ri:attachment").and_then(|e| get_attribute(e, "ri:filename"))
+    && !filename.is_empty()
+  {
+    return format!("\n![{alt}]({filename})\n\n");
+  }
+
+  format!("\n![{alt}]()\n\n")
 }
 
 /// Convert Confluence link to markdown.
@@ -362,5 +366,18 @@ line 2]]></ac:plain-text-body>
       .unwrap();
     let output = convert_image_to_markdown(image);
     assert!(output.contains("![test image](https://example.com/image.png)"));
+  }
+
+  #[test]
+  fn test_convert_image_with_attachment() {
+    let input = r#"<ac:image ac:alt="diagram"><ri:attachment ri:filename="diagram.png" /></ac:image>"#;
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let image = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:image"))
+      .unwrap();
+    let output = convert_image_to_markdown(image);
+    assert!(output.contains("![diagram](diagram.png)"));
   }
 }
