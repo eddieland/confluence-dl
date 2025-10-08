@@ -145,10 +145,6 @@ pub struct OutputOptions {
   #[arg(short, long, default_value = "./confluence-export", value_name = "DIR")]
   pub output: String,
 
-  /// Output format
-  #[arg(long, value_enum, default_value = "markdown", value_name = "FORMAT")]
-  pub format: OutputFormat,
-
   /// Overwrite existing files
   #[arg(long)]
   pub overwrite: bool,
@@ -156,14 +152,6 @@ pub struct OutputOptions {
   /// Save raw Confluence storage format alongside Markdown
   #[arg(long)]
   pub save_raw: bool,
-}
-
-/// Output format options
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum OutputFormat {
-  Markdown,
-  Json,
-  Html,
 }
 
 /// Behavior options
@@ -321,7 +309,6 @@ mod tests {
       },
       output: OutputOptions {
         output: "./output".to_string(),
-        format: OutputFormat::Markdown,
         overwrite: false,
         save_raw: false,
       },
@@ -370,7 +357,6 @@ mod tests {
       },
       output: OutputOptions {
         output: "./output".to_string(),
-        format: OutputFormat::Markdown,
         overwrite: false,
         save_raw: false,
       },
@@ -419,7 +405,6 @@ mod tests {
       },
       output: OutputOptions {
         output: "./output".to_string(),
-        format: OutputFormat::Markdown,
         overwrite: false,
         save_raw: false,
       },
@@ -464,7 +449,6 @@ mod tests {
       },
       output: OutputOptions {
         output: "./output".to_string(),
-        format: OutputFormat::Markdown,
         overwrite: false,
         save_raw: false,
       },
@@ -511,7 +495,6 @@ mod tests {
       },
       output: OutputOptions {
         output: "./output".to_string(),
-        format: OutputFormat::Markdown,
         overwrite: false,
         save_raw: false,
       },
@@ -555,7 +538,6 @@ mod tests {
       },
       output: OutputOptions {
         output: "./output".to_string(),
-        format: OutputFormat::Markdown,
         overwrite: false,
         save_raw: false,
       },
@@ -599,7 +581,6 @@ mod tests {
       },
       output: OutputOptions {
         output: "./output".to_string(),
-        format: OutputFormat::Markdown,
         overwrite: false,
         save_raw: false,
       },
