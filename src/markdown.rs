@@ -192,6 +192,17 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
         .unwrap_or_else(|| get_element_text(element));
       format!("\n> {}\n\n", body.trim())
     }
+    "note" | "info" | "warning" | "tip" => {
+      let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
+        .map(|e| e.text().collect::<String>())
+        .unwrap_or_default();
+
+      let body = find_child_by_tag(element, "ac:rich-text-body")
+        .map(|elem| convert_element_to_markdown(&elem))
+        .unwrap_or_else(|| get_element_text(element));
+
+      format_admonition_block(macro_name, title.trim(), body.trim())
+    }
     "status" => {
       let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
         .map(|e| e.text().collect::<String>())
@@ -230,6 +241,41 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
       get_element_text(element)
     }
   }
+}
+
+/// Format Confluence admonition macros (note, info, warning, tip) as Markdown
+/// blockquotes
+fn format_admonition_block(macro_name: &str, title: &str, body: &str) -> String {
+  let default_title = match macro_name {
+    "info" => "Info",
+    "warning" => "Warning",
+    "tip" => "Tip",
+    _ => "Note",
+  };
+
+  let heading = if title.is_empty() { default_title } else { title };
+
+  if body.is_empty() {
+    return format!("\n> **{heading}:**\n\n");
+  }
+
+  let mut result = String::new();
+  let mut lines = body.lines();
+
+  if let Some(first_line) = lines.next() {
+    result.push_str(&format!("\n> **{heading}:** {}", first_line.trim()));
+  }
+
+  for line in lines {
+    if line.trim().is_empty() {
+      result.push_str("\n>");
+    } else {
+      result.push_str(&format!("\n> {}", line.trim()));
+    }
+  }
+
+  result.push_str("\n\n");
+  result
 }
 
 /// Find a child element by tag name (handles namespaced tags)
@@ -557,6 +603,20 @@ mod tests {
     assert!(output.contains("**bold**"));
     assert!(output.contains("_italic_"));
     assert!(output.contains("~~strike~~"));
+  }
+
+  #[test]
+  fn test_convert_note_macro() {
+    let input = r#"
+      <ac:structured-macro ac:name="note">
+        <ac:rich-text-body>
+          <p>This is a note block.</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let output = storage_to_markdown(input).unwrap();
+    assert!(output.contains("> **Note:** This is a note block."));
   }
 
   #[test]
