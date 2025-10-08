@@ -1,0 +1,29 @@
+---
+source: tests/e2e_tests.rs
+expression: markdown
+---
+# API Documentation
+
+## Overview
+
+This API provides access to our services.
+
+## Endpoints
+
+- /api/users - User management
+- /api/posts - Content management
+
+## Authentication
+
+Use **API tokens** for authentication.
+
+  curl -H "Authorization: Bearer TOKEN" https://api.example.com/users
+
+## Code Examples
+
+  python
+  import requests
+
+def get_users():
+    response = requests.get('https://api.example.com/users')
+    return response.json()

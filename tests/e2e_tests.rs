@@ -8,6 +8,7 @@ mod common;
 use common::fake_confluence::FakeConfluenceClient;
 use common::fixtures;
 use confluence_dl::confluence::ConfluenceApi;
+use insta::assert_snapshot;
 
 #[test]
 fn test_fetch_basic_page() {
@@ -290,7 +291,7 @@ fn test_image_download_workflow() {
   // Verify files exist
   for (original_filename, local_path) in &filename_map {
     let full_path = output_path.join(local_path);
-    assert!(full_path.exists(), "Image file should exist: {:?}", full_path);
+    assert!(full_path.exists(), "Image file should exist: {full_path:?}");
     println!("Downloaded {} -> {}", original_filename, local_path.display());
   }
 
@@ -301,8 +302,7 @@ fn test_image_download_workflow() {
   // Verify links were updated to point to the images directory
   assert!(
     updated_markdown.contains("](images/"),
-    "Links should be updated to images directory: {}",
-    updated_markdown
+    "Links should be updated to images directory: {updated_markdown}"
   );
 }
 
@@ -508,59 +508,7 @@ fn test_convert_comprehensive_features_page_to_markdown() {
   // Convert to markdown
   let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
 
-  // Verify the markdown contains expected elements
-  assert!(
-    markdown.contains("# Comprehensive Test Page") || markdown.contains("Comprehensive Test Page"),
-    "Should contain page title"
-  );
-  assert!(
-    markdown.contains("## Basic Formatting") || markdown.contains("Basic Formatting"),
-    "Should contain section heading"
-  );
-  assert!(markdown.contains("**bold**"), "Should contain bold text");
-  assert!(
-    markdown.contains("_italic_") || markdown.contains("*italic*"),
-    "Should contain italic text"
-  );
-  assert!(markdown.contains("`inline code`"), "Should contain inline code");
-  assert!(
-    markdown.contains("https://example.com") || markdown.contains("[") || markdown.contains("]("),
-    "Should contain link content"
-  );
-
-  // Verify lists
-  assert!(markdown.contains("- Unordered item 1"), "Should contain unordered list");
-  assert!(markdown.contains("1. Ordered item 1"), "Should contain ordered list");
-
-  // Verify task list
-  assert!(
-    markdown.contains("- [x] Complete this task"),
-    "Should contain completed task"
-  );
-  assert!(
-    markdown.contains("- [ ] Pending task"),
-    "Should contain incomplete task"
-  );
-
-  // Verify table (should have header row)
-  assert!(markdown.contains("Header 1"), "Should contain table header");
-  assert!(markdown.contains("Cell 1"), "Should contain table cell");
-
-  // Verify code block (structured macros are converted)
-  assert!(
-    markdown.contains("function greet") || markdown.contains("javascript") || markdown.contains("```"),
-    "Should contain code content or block markers"
-  );
-
-  // Verify image reference
-  assert!(
-    markdown.contains("![image](") || markdown.contains("!["),
-    "Should contain image reference"
-  );
-
-  // Verify time element was processed (time elements may not render the datetime
-  // attribute as text)
-  assert!(!markdown.is_empty(), "Should successfully convert time elements");
+  assert_snapshot!(markdown);
 }
 
 #[test]
@@ -586,26 +534,7 @@ fn test_convert_meeting_notes_overview_to_markdown() {
   // Convert to markdown
   let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
 
-  // Verify the markdown contains expected sections
-  assert!(
-    markdown.contains("## Incomplete tasks from meetings"),
-    "Should contain incomplete tasks heading"
-  );
-  assert!(
-    markdown.contains("## Decisions from meetings"),
-    "Should contain decisions heading"
-  );
-  assert!(
-    markdown.contains("## All meeting notes"),
-    "Should contain all notes heading"
-  );
-
-  // The macros should be stripped out, leaving only the structure
-  assert!(!markdown.contains("ac:macro"), "Should not contain raw macro tags");
-  assert!(
-    !markdown.contains("ac:parameter"),
-    "Should not contain raw parameter tags"
-  );
+  assert_snapshot!(markdown);
 }
 
 #[test]
@@ -631,43 +560,7 @@ fn test_convert_meeting_notes_with_tasks_to_markdown() {
   // Convert to markdown
   let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
 
-  // Verify headings with emoji are converted (emoji might not render but heading
-  // structure should exist)
-  assert!(
-    markdown.contains("## ") || markdown.contains("Date") || markdown.contains("Participants"),
-    "Should contain H2 headings or section content"
-  );
-
-  // Verify date is present (time elements have datetime attribute which might not
-  // be in text) Just verify the conversion worked without error
-  assert!(!markdown.is_empty(), "Should produce non-empty markdown");
-
-  // Verify task list
-  assert!(
-    markdown.contains("- [ ] Review architecture proposal"),
-    "Should contain incomplete task"
-  );
-  assert!(
-    markdown.contains("- [x] Update documentation"),
-    "Should contain completed task"
-  );
-
-  // Verify table structure
-  assert!(markdown.contains("Time"), "Should contain table header 'Time'");
-  assert!(markdown.contains("Topic"), "Should contain table header 'Topic'");
-  assert!(markdown.contains("10:00"), "Should contain table cell data");
-  assert!(markdown.contains("Project update"), "Should contain table cell data");
-
-  // Verify no raw XML tags remain
-  assert!(!markdown.contains("ac:task"), "Should not contain raw task tags");
-  assert!(
-    !markdown.contains("ac:emoticon"),
-    "Should not contain raw emoticon tags"
-  );
-  assert!(
-    !markdown.contains("ri:user"),
-    "Should not contain raw user reference tags"
-  );
+  assert_snapshot!(markdown);
 }
 
 #[test]
@@ -690,38 +583,7 @@ fn test_convert_complex_page_with_code_to_markdown() {
   // Convert to markdown
   let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
 
-  // Verify structure
-  assert!(markdown.contains("# API Documentation"), "Should contain H1 heading");
-  assert!(markdown.contains("## Overview"), "Should contain H2 heading");
-  assert!(markdown.contains("## Endpoints"), "Should contain endpoints section");
-  assert!(markdown.contains("## Authentication"), "Should contain auth section");
-
-  // Verify list items
-  assert!(markdown.contains("/api/users"), "Should contain API endpoint");
-  assert!(markdown.contains("/api/posts"), "Should contain API endpoint");
-  assert!(
-    markdown.contains("User management"),
-    "Should contain endpoint description"
-  );
-
-  // Verify bold text
-  assert!(markdown.contains("**API tokens**"), "Should contain bold text");
-
-  // Verify code blocks from macros
-  assert!(
-    markdown.contains("curl") || markdown.contains("Bearer TOKEN"),
-    "Should contain code from first macro"
-  );
-  assert!(
-    markdown.contains("import requests") || markdown.contains("def get_users"),
-    "Should contain Python code from second macro"
-  );
-
-  // Verify inline code (endpoints should be present in some form)
-  assert!(
-    markdown.contains("/api/users") || markdown.contains("api"),
-    "Should contain API endpoint references"
-  );
+  assert_snapshot!(markdown);
 }
 
 #[test]
@@ -744,42 +606,7 @@ fn test_convert_page_with_internal_links_to_markdown() {
   // Convert to markdown
   let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
 
-  // Verify structure
-  assert!(markdown.contains("# Installation"), "Should contain H1 heading");
-  assert!(markdown.contains("## Steps"), "Should contain H2 heading");
-
-  // Verify ordered list
-  assert!(
-    markdown.contains("1. Download the installer"),
-    "Should contain first step"
-  );
-  assert!(
-    markdown.contains("2. Run the setup wizard"),
-    "Should contain second step"
-  );
-  assert!(
-    markdown.contains("3. Configure your settings"),
-    "Should contain third step"
-  );
-
-  // Internal links should be converted (the actual link text should be present)
-  // Note: The current implementation may not fully resolve internal links,
-  // but should at least extract the text
-  assert!(
-    markdown.contains("Getting Started Guide") || markdown.contains("prerequisites"),
-    "Should reference Getting Started Guide"
-  );
-  assert!(
-    markdown.contains("API Documentation") || markdown.contains("API details"),
-    "Should reference API Documentation"
-  );
-
-  // Verify no raw Confluence link tags remain
-  assert!(!markdown.contains("ac:link"), "Should not contain raw link tags");
-  assert!(
-    !markdown.contains("ri:page"),
-    "Should not contain raw page reference tags"
-  );
+  assert_snapshot!(markdown);
 }
 
 #[test]
@@ -806,22 +633,7 @@ fn test_end_to_end_page_fetch_and_convert() {
 
   let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
 
-  // Verify conversion
-  assert!(markdown.contains("# Getting Started"), "Should contain heading");
-  assert!(
-    markdown.contains("Welcome to our documentation"),
-    "Should contain welcome text"
-  );
-  assert!(
-    markdown.contains("get started with our product"),
-    "Should contain guide text"
-  );
-
-  // Verify clean output (no XML artifacts)
-  assert!(!markdown.contains("<h1>"), "Should not contain HTML tags");
-  assert!(!markdown.contains("<p>"), "Should not contain HTML tags");
-  assert!(!markdown.is_empty(), "Markdown should not be empty");
-  assert!(markdown.ends_with('\n'), "Markdown should end with newline");
+  assert_snapshot!(markdown);
 }
 
 #[test]
@@ -857,24 +669,5 @@ fn test_markdown_conversion_preserves_structure() {
 
   let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
 
-  // Count heading levels to verify hierarchy (headings may start at beginning
-  // without \n prefix)
-  let h1_count = markdown.matches("\n# ").count() + markdown.matches("# ").count();
-  let h2_count = markdown.matches("\n## ").count() + markdown.matches("## ").count();
-
-  assert!(
-    h1_count > 0 || markdown.contains("Comprehensive"),
-    "Should have at least one H1 heading"
-  );
-  assert!(
-    h2_count > 0 || markdown.contains("Formatting"),
-    "Should have at least one H2 heading"
-  );
-
-  // Verify proper spacing (no triple+ newlines after cleanup)
-  assert!(!markdown.contains("\n\n\n\n"), "Should not have excessive blank lines");
-
-  // Verify markdown ends with single newline
-  assert!(markdown.ends_with('\n'), "Should end with newline");
-  assert!(!markdown.ends_with("\n\n\n"), "Should not end with multiple newlines");
+  assert_snapshot!(markdown);
 }

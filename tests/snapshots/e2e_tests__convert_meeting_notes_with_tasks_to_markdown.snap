@@ -1,0 +1,24 @@
+---
+source: tests/e2e_tests.rs
+expression: markdown
+---
+##  Date
+
+##  Participants
+
+- 
+
+##  Goals
+
+List goals for this meeting
+
+##  Discussion topics
+
+| Time  | Topic          |
+| ----- | -------------- |
+| 10:00 | Project update |
+
+##  Action items
+
+- [ ] Review architecture proposal
+- [x] Update documentation

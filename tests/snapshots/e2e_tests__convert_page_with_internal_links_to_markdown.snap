@@ -1,0 +1,15 @@
+---
+source: tests/e2e_tests.rs
+expression: markdown
+---
+# Installation
+
+See the  for prerequisites.
+
+For API details, check .
+
+## Steps
+
+1. Download the installer
+2. Run the setup wizard
+3. Configure your settings
