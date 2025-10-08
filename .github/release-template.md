@@ -8,7 +8,7 @@
 
 ```bash
 # Download the release
-curl -L -o confluence-dl-linux-x86_64.tar.gz https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-linux-x86_64-v${VERSION}.tar.gz
+curl -fL -o confluence-dl-linux-x86_64.tar.gz https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-linux-x86_64-v${VERSION}.tar.gz
 
 # Extract the archive
 tar -xzf confluence-dl-linux-x86_64.tar.gz
@@ -27,7 +27,7 @@ rm confluence-dl-linux-x86_64.tar.gz confluence-dl
 
 ```bash
 # Download the release
-curl -L -o confluence-dl-macos-x86_64.tar.gz https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-macos-x86_64-v${VERSION}.tar.gz
+curl -fL -o confluence-dl-macos-x86_64.tar.gz https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-macos-x86_64-v${VERSION}.tar.gz
 
 # Extract the archive
 tar -xzf confluence-dl-macos-x86_64.tar.gz
@@ -47,13 +47,13 @@ rm confluence-dl-macos-x86_64.tar.gz confluence-dl
 ### Ubuntu/Linux
 
 ```bash
-curl -L https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-linux-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp confluence-dl /usr/local/bin/ && sudo chmod +x /usr/local/bin/confluence-dl && rm confluence-dl
+curl -fL https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-linux-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp confluence-dl /usr/local/bin/ && sudo chmod +x /usr/local/bin/confluence-dl && rm confluence-dl
 ```
 
 ### macOS
 
 ```bash
-curl -L https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-macos-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp confluence-dl /usr/local/bin/ && sudo chmod +x /usr/local/bin/confluence-dl && rm confluence-dl
+curl -fL https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-macos-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp confluence-dl /usr/local/bin/ && sudo chmod +x /usr/local/bin/confluence-dl && rm confluence-dl
 ```
 
 ## Verify Installation
