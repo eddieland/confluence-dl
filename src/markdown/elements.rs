@@ -325,6 +325,8 @@ mod tests {
       </ol>
     "#;
     let result = convert_to_markdown(input, 0);
+    // Multiline inline snapshots with funky spacing confuse rustfmt, so keep this
+    // escaped.
     let output = result.escape_default();
     insta::assert_snapshot!(output, @r"- Item 1\n- Item 2\n\n      \n1. First\n2. Second\n");
   }
