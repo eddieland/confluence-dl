@@ -6,6 +6,7 @@
 use roxmltree::Node;
 use tracing::debug;
 
+use super::MarkdownOptions;
 use super::emoji::{convert_emoji_to_markdown, convert_span_emoji};
 use super::html_entities::decode_html_entities;
 use super::macros::{
@@ -92,7 +93,7 @@ fn format_list_item(item: &str, prefix: &str) -> String {
 ///
 /// # Returns
 /// A Markdown string representing the element and its descendants.
-pub fn convert_node_to_markdown(node: Node) -> String {
+pub fn convert_node_to_markdown(node: Node, options: &MarkdownOptions) -> String {
   let mut result = String::new();
 
   for child in node.children() {
@@ -103,16 +104,28 @@ pub fn convert_node_to_markdown(node: Node) -> String {
 
         match local_name {
           // Headings
-          "h1" => result.push_str(&format!("\n# {}\n\n", convert_node_to_markdown(child).trim())),
-          "h2" => result.push_str(&format!("\n## {}\n\n", convert_node_to_markdown(child).trim())),
-          "h3" => result.push_str(&format!("\n### {}\n\n", convert_node_to_markdown(child).trim())),
-          "h4" => result.push_str(&format!("\n#### {}\n\n", convert_node_to_markdown(child).trim())),
-          "h5" => result.push_str(&format!("\n##### {}\n\n", convert_node_to_markdown(child).trim())),
-          "h6" => result.push_str(&format!("\n###### {}\n\n", convert_node_to_markdown(child).trim())),
+          "h1" => result.push_str(&format!("\n# {}\n\n", convert_node_to_markdown(child, options).trim())),
+          "h2" => result.push_str(&format!("\n## {}\n\n", convert_node_to_markdown(child, options).trim())),
+          "h3" => result.push_str(&format!(
+            "\n### {}\n\n",
+            convert_node_to_markdown(child, options).trim()
+          )),
+          "h4" => result.push_str(&format!(
+            "\n#### {}\n\n",
+            convert_node_to_markdown(child, options).trim()
+          )),
+          "h5" => result.push_str(&format!(
+            "\n##### {}\n\n",
+            convert_node_to_markdown(child, options).trim()
+          )),
+          "h6" => result.push_str(&format!(
+            "\n###### {}\n\n",
+            convert_node_to_markdown(child, options).trim()
+          )),
 
           // Paragraphs
           "p" => {
-            let content = convert_node_to_markdown(child);
+            let content = convert_node_to_markdown(child, options);
             let trimmed = content.trim();
             if !trimmed.is_empty() {
               result.push_str(&format!("{trimmed}\n\n"));
@@ -120,17 +133,17 @@ pub fn convert_node_to_markdown(node: Node) -> String {
           }
 
           // Text formatting
-          "strong" | "b" => result.push_str(&format!("**{}**", convert_node_to_markdown(child))),
-          "em" | "i" => result.push_str(&format!("_{}_", convert_node_to_markdown(child))),
-          "u" => result.push_str(&format!("_{}_", convert_node_to_markdown(child))),
-          "s" | "del" => result.push_str(&format!("~~{}~~", convert_node_to_markdown(child))),
-          "code" => result.push_str(&format!("`{}`", convert_node_to_markdown(child))),
+          "strong" | "b" => result.push_str(&format!("**{}**", convert_node_to_markdown(child, options))),
+          "em" | "i" => result.push_str(&format!("_{}_", convert_node_to_markdown(child, options))),
+          "u" => result.push_str(&format!("_{}_", convert_node_to_markdown(child, options))),
+          "s" | "del" => result.push_str(&format!("~~{}~~", convert_node_to_markdown(child, options))),
+          "code" => result.push_str(&format!("`{}`", convert_node_to_markdown(child, options))),
 
           // Lists
           "ul" => {
             result.push('\n');
             for li in child.children().filter(|n| matches_tag(*n, "li")) {
-              let item = convert_node_to_markdown(li);
+              let item = convert_node_to_markdown(li, options);
               result.push_str(&format_list_item(&item, "- "));
             }
             result.push('\n');
@@ -138,7 +151,7 @@ pub fn convert_node_to_markdown(node: Node) -> String {
           "ol" => {
             result.push('\n');
             for (index, li) in child.children().filter(|n| matches_tag(*n, "li")).enumerate() {
-              let item = convert_node_to_markdown(li);
+              let item = convert_node_to_markdown(li, options);
               let prefix = format!("{}. ", index + 1);
               result.push_str(&format_list_item(&item, &prefix));
             }
@@ -147,7 +160,7 @@ pub fn convert_node_to_markdown(node: Node) -> String {
 
           // Links
           "a" => {
-            let text = convert_node_to_markdown(child);
+            let text = convert_node_to_markdown(child, options);
             let href = get_attribute(child, "href").unwrap_or_default();
             result.push_str(&format!("[{}]({})", text.trim(), href));
           }
@@ -170,7 +183,11 @@ pub fn convert_node_to_markdown(node: Node) -> String {
             result.push_str(&convert_confluence_link_to_markdown(child));
           }
           "structured-macro" if matches_tag(child, "ac:structured-macro") => {
-            result.push_str(&convert_macro_to_markdown(child, &convert_node_to_markdown));
+            result.push_str(&convert_macro_to_markdown(
+              child,
+              &|node| convert_node_to_markdown(node, options),
+              options,
+            ));
           }
           "task-list" if matches_tag(child, "ac:task-list") => {
             result.push_str(&convert_task_list_to_markdown(child));
@@ -179,21 +196,23 @@ pub fn convert_node_to_markdown(node: Node) -> String {
             result.push_str(&convert_image_to_markdown(child));
           }
           "adf-extension" if matches_tag(child, "ac:adf-extension") => {
-            result.push_str(&convert_adf_extension_to_markdown(child, &convert_node_to_markdown));
+            result.push_str(&convert_adf_extension_to_markdown(child, &|node| {
+              convert_node_to_markdown(node, options)
+            }));
           }
 
           // Layout elements (just extract content)
           "layout" if matches_tag(child, "ac:layout") => {
-            result.push_str(&convert_node_to_markdown(child));
+            result.push_str(&convert_node_to_markdown(child, options));
           }
           "layout-section" if matches_tag(child, "ac:layout-section") => {
-            result.push_str(&convert_node_to_markdown(child));
+            result.push_str(&convert_node_to_markdown(child, options));
           }
           "layout-cell" if matches_tag(child, "ac:layout-cell") => {
-            result.push_str(&convert_node_to_markdown(child));
+            result.push_str(&convert_node_to_markdown(child, options));
           }
           "rich-text-body" if matches_tag(child, "ac:rich-text-body") => {
-            result.push_str(&convert_node_to_markdown(child));
+            result.push_str(&convert_node_to_markdown(child, options));
           }
 
           // Skip these internal elements
@@ -221,7 +240,7 @@ pub fn convert_node_to_markdown(node: Node) -> String {
             if let Some(emoji) = convert_span_emoji(child) {
               result.push_str(&emoji);
             } else {
-              result.push_str(&convert_node_to_markdown(child));
+              result.push_str(&convert_node_to_markdown(child, options));
             }
           }
 
@@ -237,7 +256,7 @@ pub fn convert_node_to_markdown(node: Node) -> String {
           _ => {
             let debug_name = super::utils::qualified_tag_name(child);
             debug!("Unknown tag: {debug_name}");
-            result.push_str(&convert_node_to_markdown(child));
+            result.push_str(&convert_node_to_markdown(child, options));
           }
         }
       }
@@ -261,11 +280,12 @@ mod tests {
   fn convert_to_markdown(input: &str) -> String {
     use roxmltree::Document;
 
+    use crate::markdown::MarkdownOptions;
     use crate::markdown::utils::wrap_with_namespaces;
 
     let wrapped = wrap_with_namespaces(input);
     let document = Document::parse(&wrapped).unwrap();
-    let markdown = convert_node_to_markdown(document.root_element());
+    let markdown = convert_node_to_markdown(document.root_element(), &MarkdownOptions::default());
     crate::markdown::utils::clean_markdown(&markdown)
   }
 

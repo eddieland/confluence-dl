@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use roxmltree::{Node, NodeType};
 use tracing::debug;
 
+use super::MarkdownOptions;
 use super::emoji::emoji_id_to_unicode;
 use super::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_attribute, get_element_text, matches_tag};
 
@@ -28,7 +29,11 @@ use super::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_attribute,
 /// # Returns
 /// A Markdown representation of the macro content. Unknown macros fall back to
 /// returning their text content.
-pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node) -> String) -> String {
+pub fn convert_macro_to_markdown(
+  element: Node,
+  convert_node: &dyn Fn(Node) -> String,
+  options: &MarkdownOptions,
+) -> String {
   let macro_name = get_attribute(element, "ac:name").unwrap_or_default();
 
   match macro_name.as_str() {
@@ -88,7 +93,22 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node) -> S
       }
       result
     }
-    "anchor" => String::new(), // Skip anchors
+    "anchor" => {
+      if !options.preserve_anchors {
+        return String::new();
+      }
+
+      let anchor_id = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "anchor")
+        .map(get_element_text)
+        .map(|value| value.trim().to_string())
+        .unwrap_or_default();
+
+      if anchor_id.is_empty() {
+        String::new()
+      } else {
+        format!("<a id=\"{anchor_id}\"></a>")
+      }
+    }
     "decisionreport" => {
       let query = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "cql")
         .map(get_element_text)
@@ -802,6 +822,7 @@ mod tests {
   use roxmltree::Document;
 
   use super::*;
+  use crate::markdown::MarkdownOptions;
   use crate::markdown::utils::{get_attribute, matches_tag, wrap_with_namespaces};
 
   // Simple converter for tests that doesn't do recursion
@@ -825,7 +846,7 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
     assert!(output.contains("> **Note:** This is a note block."));
   }
 
@@ -838,8 +859,45 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
     assert!(output.contains("**Table of Contents**"));
+  }
+
+  #[test]
+  fn test_anchor_macro_ignored_by_default() {
+    let input = r#"
+      <ac:structured-macro ac:name="anchor">
+        <ac:parameter ac:name="anchor">section-1</ac:parameter>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
+    assert!(output.is_empty());
+  }
+
+  #[test]
+  fn test_anchor_macro_preserved_when_requested() {
+    let input = r#"
+      <ac:structured-macro ac:name="anchor">
+        <ac:parameter ac:name="anchor">section-1</ac:parameter>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let options = MarkdownOptions { preserve_anchors: true };
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &options);
+    assert_eq!(output, "<a id=\"section-1\"></a>");
   }
 
   #[test]
@@ -860,7 +918,7 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
 
     let expected = "\n```rust\nfn main() {\n  println!(\"hi\");\n}\n```\n\n";
     assert_eq!(output, expected);
@@ -881,7 +939,7 @@ line 2]]></ac:plain-text-body>
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
 
     let expected = "\n```\nline 1\nline 2\n```\n\n";
     assert_eq!(output, expected);
@@ -982,7 +1040,7 @@ line 2]]></ac:plain-text-body>
         matches_tag(*node, "ac:structured-macro") && get_attribute(*node, "ac:name").as_deref() == Some("decision")
       })
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
 
     assert!(output.contains("**Decision:** Adopt Rust"));
     assert!(output.contains("Status: decided"));
@@ -1032,7 +1090,7 @@ line 2]]></ac:plain-text-body>
         matches_tag(*node, "ac:structured-macro") && get_attribute(*node, "ac:name").as_deref() == Some("decision-list")
       })
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
 
     assert!(output.contains("- **Decision:** Adopt Rust"));
     assert!(output.contains("- **Decision:** Keep Python scripts"));
@@ -1056,7 +1114,7 @@ line 2]]></ac:plain-text-body>
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
 
     assert!(output.contains("Decision report macro"));
     assert!(output.contains("space = \"DOCS\" and label = \"meeting-notes\""));

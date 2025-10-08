@@ -39,6 +39,13 @@ mod utils;
 // Public API - re-export main conversion function
 pub use elements::convert_node_to_markdown;
 
+/// Options that control Markdown conversion behaviour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MarkdownOptions {
+  /// Preserve Confluence anchor macros as HTML anchors in the output.
+  pub preserve_anchors: bool,
+}
+
 /// Convert Confluence storage format to Markdown.
 ///
 /// This implementation uses proper HTML parsing to handle Confluence's
@@ -61,6 +68,11 @@ pub use elements::convert_node_to_markdown;
 /// assert_eq!(output.trim(), "Hello **world**!");
 /// ```
 pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
+  storage_to_markdown_with_options(storage_content, &MarkdownOptions::default())
+}
+
+/// Convert Confluence storage format to Markdown using the provided options.
+pub fn storage_to_markdown_with_options(storage_content: &str, options: &MarkdownOptions) -> Result<String> {
   // Pre-process: Replace HTML entities with numeric character references
   // roxmltree only supports XML's 5 predefined entities, not HTML entities
   let preprocessed = html_entities::preprocess_html_entities(storage_content);
@@ -82,7 +94,7 @@ pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
   })?;
 
   // Convert to markdown
-  let markdown = convert_node_to_markdown(document.root_element());
+  let markdown = convert_node_to_markdown(document.root_element(), options);
 
   // Clean up the result
   let cleaned = utils::clean_markdown(&markdown);
@@ -130,6 +142,31 @@ mod tests {
     let input = r#"<a href="https://example.com">Example</a>"#;
     let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("[Example](https://example.com)"));
+  }
+
+  #[test]
+  fn test_anchor_macro_not_preserved_by_default() {
+    let input = r#"
+      <ac:structured-macro ac:name="anchor">
+        <ac:parameter ac:name="anchor">my-anchor</ac:parameter>
+      </ac:structured-macro>
+    "#;
+
+    let output = storage_to_markdown(input).unwrap();
+    assert!(!output.contains("<a id=\"my-anchor\"></a>"));
+  }
+
+  #[test]
+  fn test_anchor_macro_preserved_when_requested() {
+    let input = r#"
+      <ac:structured-macro ac:name="anchor">
+        <ac:parameter ac:name="anchor">my-anchor</ac:parameter>
+      </ac:structured-macro>
+    "#;
+
+    let options = MarkdownOptions { preserve_anchors: true };
+    let output = storage_to_markdown_with_options(input, &options).unwrap();
+    assert!(output.contains("<a id=\"my-anchor\"></a>"));
   }
 
   #[test]

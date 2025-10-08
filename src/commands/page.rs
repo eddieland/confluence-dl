@@ -8,7 +8,8 @@ use crate::cli::Cli;
 use crate::color::ColorScheme;
 use crate::commands::auth::load_credentials;
 use crate::confluence::{self, ConfluenceApi};
-use crate::{attachments, images, markdown};
+use crate::markdown::{self, MarkdownOptions};
+use crate::{attachments, images};
 
 /// Handle page download
 pub(crate) async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
@@ -138,7 +139,12 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
 
   // Convert to Markdown
   println!("\n{} {}", colors.info("→"), colors.info("Converting to Markdown"));
-  let mut markdown = markdown::storage_to_markdown(storage_content)?;
+  let mut markdown = if cli.images_links.preserve_anchors {
+    let options = MarkdownOptions { preserve_anchors: true };
+    markdown::storage_to_markdown_with_options(storage_content, &options)?
+  } else {
+    markdown::storage_to_markdown(storage_content)?
+  };
 
   if cli.behavior.verbose > 0 {
     println!(
@@ -312,8 +318,13 @@ fn download_page_tree<'a>(
     }
 
     // Convert to Markdown
-    let mut markdown = markdown::storage_to_markdown(storage_content)
-      .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
+    let mut markdown = if cli.images_links.preserve_anchors {
+      let options = MarkdownOptions { preserve_anchors: true };
+      markdown::storage_to_markdown_with_options(storage_content, &options)
+    } else {
+      markdown::storage_to_markdown(storage_content)
+    }
+    .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
 
     let mut downloaded_image_filenames = HashSet::new();
 
