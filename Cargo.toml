@@ -19,7 +19,6 @@ url = "2"
 base64 = "0.22"
 anyhow = "1"
 scraper = "0.24.0"
-html2text = "0.15.5"
 
 [dev-dependencies]
 insta = "1.41"
