@@ -4,6 +4,7 @@
 //! links, lists, code blocks, and formatting.
 
 use roxmltree::Node;
+use tracing::debug;
 
 use super::emoji::{convert_emoji_to_markdown, convert_span_emoji};
 use super::html_entities::decode_html_entities;
@@ -158,7 +159,7 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           _ => {
             if verbose >= 3 {
               let debug_name = super::utils::qualified_tag_name(child);
-              eprintln!("[DEBUG] Unknown tag: {debug_name}");
+              debug!("Unknown tag: {debug_name}");
             }
             result.push_str(&convert_node_to_markdown(child, verbose));
           }

@@ -3,6 +3,7 @@
 //! Handles structured macros like panels, notes, status badges, and more.
 
 use roxmltree::Node;
+use tracing::debug;
 
 use super::emoji::emoji_id_to_unicode;
 use super::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_attribute, get_element_text};
@@ -72,7 +73,7 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) 
         .unwrap_or_default();
 
       if verbose >= 2 && !result.is_empty() {
-        eprintln!("[DEBUG] Macro emoji: id={emoji_id:?} -> {result}");
+        debug!("Macro emoji: id={emoji_id:?} -> {result}");
       }
       result
     }
@@ -168,7 +169,7 @@ pub fn convert_confluence_link_to_markdown(element: Node, verbose: u8) -> String
     let account_id = get_attribute(user_node, "ri:account-id").unwrap_or_default();
 
     if verbose >= 2 {
-      eprintln!("[DEBUG] User mention: account_id={account_id}");
+      debug!("User mention: account_id={account_id}");
     }
 
     // Format as @mention with account ID as fallback
@@ -181,7 +182,7 @@ pub fn convert_confluence_link_to_markdown(element: Node, verbose: u8) -> String
     let title = get_attribute(page_node, "ri:content-title").unwrap_or_default();
 
     if verbose >= 2 {
-      eprintln!("[DEBUG] Page link: title={title}");
+      debug!("Page link: title={title}");
     }
 
     // Format as wiki-style link
