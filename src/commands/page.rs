@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::{fs, process};
 
+use anyhow::Context;
+
 use crate::cli::Cli;
 use crate::color::ColorScheme;
 use crate::commands::auth::load_credentials;
@@ -184,7 +186,12 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
   }
 
   // Create output directory
-  fs::create_dir_all(&cli.output.output)?;
+  fs::create_dir_all(&cli.output.output).with_context(|| {
+    format!(
+      "Failed to create output directory {}",
+      Path::new(&cli.output.output).display()
+    )
+  })?;
 
   // Generate filename from page title
   let filename = sanitize_filename(&page.title);
@@ -202,7 +209,8 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
   println!("\n{} {}", colors.info("→"), colors.info("Writing to disk"));
   println!("  {}: {}", colors.emphasis("File"), colors.path(output_path.display()));
 
-  fs::write(&output_path, markdown)?;
+  fs::write(&output_path, markdown)
+    .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
 
   Ok(())
 }
@@ -243,9 +251,11 @@ fn download_page_tree(
   if cli.output.save_raw {
     let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
     if let Some(parent) = raw_output_path.parent() {
-      fs::create_dir_all(parent)?;
+      fs::create_dir_all(parent)
+        .with_context(|| format!("Failed to create directory for raw storage at {}", parent.display()))?;
     }
-    fs::write(&raw_output_path, storage_content)?;
+    fs::write(&raw_output_path, storage_content)
+      .with_context(|| format!("Failed to write raw storage to {}", raw_output_path.display()))?;
 
     if cli.behavior.verbose > 0 {
       println!(
@@ -291,11 +301,12 @@ fn download_page_tree(
   } else {
     // Create parent directory
     if let Some(parent) = output_path.parent() {
-      fs::create_dir_all(parent)?;
+      fs::create_dir_all(parent).with_context(|| format!("Failed to create directory {}", parent.display()))?;
     }
 
     // Write markdown to file
-    fs::write(&output_path, markdown)?;
+    fs::write(&output_path, markdown)
+      .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
 
     if !cli.behavior.quiet {
       println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
@@ -308,7 +319,8 @@ fn download_page_tree(
   if !tree.children.is_empty() {
     // Create subdirectory for children
     let child_dir = output_dir.join(&filename);
-    fs::create_dir_all(&child_dir)?;
+    fs::create_dir_all(&child_dir)
+      .with_context(|| format!("Failed to create directory for child pages at {}", child_dir.display()))?;
 
     for child_tree in &tree.children {
       download_page_tree(client, child_tree, &child_dir, cli, colors)?;
