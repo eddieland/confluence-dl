@@ -158,7 +158,7 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           _ => {
             if verbose >= 3 {
               let debug_name = super::utils::qualified_tag_name(child);
-              eprintln!("[DEBUG] Unknown tag: {debug_name}");
+              tracing::trace!(%debug_name, "Encountered unknown tag during conversion");
             }
             result.push_str(&convert_node_to_markdown(child, verbose));
           }

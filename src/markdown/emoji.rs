@@ -24,35 +24,35 @@ pub fn convert_emoji_to_markdown(element: Node, verbose: u8) -> String {
     && let Some(emoji) = emoji_id_to_unicode(id, verbose)
   {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji conversion: id={id} -> {emoji}");
+      tracing::debug!(%id, %emoji, "Converted emoji identifier");
     }
     return emoji;
   }
 
   if let Some(fb) = fallback.as_deref() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji fallback: {fb}");
+      tracing::debug!(fallback = %fb, "Using emoji fallback");
     }
     return fb.to_string();
   }
 
   if let Some(sc) = shortcut.as_deref() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji shortcut: {sc}");
+      tracing::debug!(shortcut = %sc, "Using emoji shortcut");
     }
     return sc.to_string();
   }
 
   if let Some(sn) = shortname.as_deref() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji shortname: {sn}");
+      tracing::debug!(shortname = %sn, "Using emoji shortname");
     }
     return sn.to_string();
   }
 
   let text = get_element_text(element);
   if verbose >= 3 && text.trim().is_empty() {
-    eprintln!("[DEBUG] Emoji element with no resolvable content");
+    tracing::trace!("Emoji element with no resolvable content");
   }
   if !text.trim().is_empty() { text } else { String::new() }
 }
@@ -73,14 +73,14 @@ pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
   }
 
   if verbose >= 2 {
-    eprintln!("[DEBUG] Span emoji: id={emoji_id:?}, shortname={emoji_shortname:?}, fallback={emoji_fallback:?}");
+    tracing::debug!(emoji_id = ?emoji_id, emoji_shortname = ?emoji_shortname, emoji_fallback = ?emoji_fallback, "Span emoji metadata");
   }
 
   if let Some(id) = emoji_id.as_deref()
     && let Some(emoji) = emoji_id_to_unicode(id, verbose)
   {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Span emoji resolved: {id} -> {emoji}");
+      tracing::debug!(%id, %emoji, "Resolved span emoji identifier");
     }
     return Some(emoji);
   }
@@ -88,20 +88,20 @@ pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
   let text = get_element_text(element);
   if !text.trim().is_empty() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Span emoji from text: {text}");
+      tracing::debug!(%text, "Using span emoji text content");
     }
     return Some(text);
   }
 
   if let Some(shortname) = emoji_shortname.or(emoji_fallback).as_deref() {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Span emoji from shortname/fallback: {shortname}");
+      tracing::debug!(shortname = %shortname, "Using span emoji shortname or fallback");
     }
     return Some(shortname.to_string());
   }
 
   if verbose >= 3 {
-    eprintln!("[DEBUG] Span emoji with no resolvable content");
+    tracing::trace!("Span emoji with no resolvable content");
   }
 
   None
@@ -115,7 +115,7 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
   let trimmed = id.trim().trim_start_matches("emoji-").trim_start_matches("emoji/");
   if trimmed.is_empty() {
     if verbose >= 3 {
-      eprintln!("[DEBUG] Empty emoji ID after trimming: {id}");
+      tracing::trace!(original_id = %id, "Empty emoji identifier after trimming");
     }
     return None;
   }
@@ -133,7 +133,7 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
       Ok(c) => c,
       Err(e) => {
         if verbose >= 2 {
-          eprintln!("[DEBUG] Failed to parse emoji hex '{part}': {e}");
+          tracing::debug!(part = %part, error = %e, "Failed to parse emoji hex");
         }
         return None;
       }
@@ -143,7 +143,7 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
       Some(c) => c,
       None => {
         if verbose >= 2 {
-          eprintln!("[DEBUG] Invalid unicode codepoint: U+{code:X}");
+          tracing::debug!(code = format!("U+{code:X}"), "Invalid unicode codepoint for emoji");
         }
         return None;
       }
@@ -154,12 +154,12 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
 
   if result.is_empty() {
     if verbose >= 3 {
-      eprintln!("[DEBUG] No valid emoji characters from ID: {id}");
+      tracing::trace!(%id, "No valid emoji characters from identifier");
     }
     None
   } else {
     if verbose >= 2 {
-      eprintln!("[DEBUG] Emoji ID {id} -> {result}");
+      tracing::debug!(%id, %result, "Resolved emoji identifier");
     }
     Some(result)
   }

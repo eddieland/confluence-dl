@@ -72,7 +72,7 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) 
         .unwrap_or_default();
 
       if verbose >= 2 && !result.is_empty() {
-        eprintln!("[DEBUG] Macro emoji: id={emoji_id:?} -> {result}");
+        tracing::debug!(emoji_id = ?emoji_id, %result, "Resolved macro emoji");
       }
       result
     }
@@ -168,7 +168,7 @@ pub fn convert_confluence_link_to_markdown(element: Node, verbose: u8) -> String
     let account_id = get_attribute(user_node, "ri:account-id").unwrap_or_default();
 
     if verbose >= 2 {
-      eprintln!("[DEBUG] User mention: account_id={account_id}");
+      tracing::debug!(%account_id, "Resolved user mention");
     }
 
     // Format as @mention with account ID as fallback
@@ -181,7 +181,7 @@ pub fn convert_confluence_link_to_markdown(element: Node, verbose: u8) -> String
     let title = get_attribute(page_node, "ri:content-title").unwrap_or_default();
 
     if verbose >= 2 {
-      eprintln!("[DEBUG] Page link: title={title}");
+      tracing::debug!(%title, "Resolved page link title");
     }
 
     // Format as wiki-style link

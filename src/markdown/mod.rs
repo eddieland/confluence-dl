@@ -70,19 +70,17 @@ pub fn storage_to_markdown(storage_content: &str, verbose: u8) -> Result<String>
   let wrapped = utils::wrap_with_namespaces(&preprocessed);
 
   if verbose >= 4 {
-    eprintln!(
-      "[DEBUG] Wrapped XML (first 500 chars):\n{}",
-      &wrapped.chars().take(500).collect::<String>()
-    );
+    let preview: String = wrapped.chars().take(500).collect();
+    tracing::trace!(preview, "Wrapped XML preview");
   }
 
   // Parse the HTML/XML content
   let document = Document::parse(&wrapped).map_err(|e| {
     if verbose >= 1 {
-      eprintln!("[ERROR] XML parse error: {e}");
-      eprintln!("[ERROR] Wrapped XML length: {} chars", wrapped.len());
+      tracing::error!(error = %e, "XML parse error");
+      tracing::error!(wrapped_length = wrapped.len(), "Wrapped XML length");
       if verbose >= 3 {
-        eprintln!("[ERROR] Full wrapped XML:\n{wrapped}");
+        tracing::trace!(wrapped_xml = %wrapped, "Full wrapped XML");
       }
     }
     anyhow::anyhow!("Failed to parse Confluence storage content: {e}")
