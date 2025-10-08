@@ -47,8 +47,6 @@ pub use elements::convert_node_to_markdown;
 /// # Arguments
 ///
 /// * `storage_content` - The Confluence storage format content (XHTML)
-/// * `verbose` - Verbosity level for debug output (0 = silent, 1+ = increasing
-///   verbosity)
 ///
 /// # Returns
 ///
@@ -59,10 +57,10 @@ pub use elements::convert_node_to_markdown;
 /// ```
 /// # use confluence_dl::markdown::storage_to_markdown;
 /// let input = "<p>Hello <strong>world</strong>!</p>";
-/// let output = storage_to_markdown(input, 0).unwrap();
+/// let output = storage_to_markdown(input).unwrap();
 /// assert_eq!(output.trim(), "Hello **world**!");
 /// ```
-pub fn storage_to_markdown(storage_content: &str, verbose: u8) -> Result<String> {
+pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
   // Pre-process: Replace HTML entities with numeric character references
   // roxmltree only supports XML's 5 predefined entities, not HTML entities
   let preprocessed = html_entities::preprocess_html_entities(storage_content);
@@ -70,27 +68,21 @@ pub fn storage_to_markdown(storage_content: &str, verbose: u8) -> Result<String>
   // Wrap with synthetic namespace declarations for Confluence namespaces
   let wrapped = utils::wrap_with_namespaces(&preprocessed);
 
-  if verbose >= 4 {
-    trace!(
-      "Wrapped XML (first 500 chars):\n{}",
-      wrapped.chars().take(500).collect::<String>()
-    );
-  }
+  trace!(
+    "Wrapped XML (first 500 chars):\n{}",
+    wrapped.chars().take(500).collect::<String>()
+  );
 
   // Parse the HTML/XML content
   let document = Document::parse(&wrapped).map_err(|e| {
-    if verbose >= 1 {
-      error!("XML parse error: {e}");
-      error!("Wrapped XML length: {} chars", wrapped.len());
-      if verbose >= 3 {
-        trace!("Full wrapped XML:\n{wrapped}");
-      }
-    }
+    error!("XML parse error: {e}");
+    error!("Wrapped XML length: {} chars", wrapped.len());
+    trace!("Full wrapped XML:\n{wrapped}");
     anyhow::anyhow!("Failed to parse Confluence storage content: {e}")
   })?;
 
   // Convert to markdown
-  let markdown = convert_node_to_markdown(document.root_element(), verbose);
+  let markdown = convert_node_to_markdown(document.root_element());
 
   // Clean up the result
   let cleaned = utils::clean_markdown(&markdown);
@@ -105,7 +97,7 @@ mod tests {
   #[test]
   fn test_convert_headings() {
     let input = "<h1>Title</h1><h2>Subtitle</h2>";
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("# Title"));
     assert!(output.contains("## Subtitle"));
   }
@@ -113,7 +105,7 @@ mod tests {
   #[test]
   fn test_convert_formatting() {
     let input = "<p><strong>bold</strong> <em>italic</em> <s>strike</s></p>";
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("**bold**"));
     assert!(output.contains("_italic_"));
     assert!(output.contains("~~strike~~"));
@@ -129,14 +121,14 @@ mod tests {
       </ac:structured-macro>
     "#;
 
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("> **Note:** This is a note block."));
   }
 
   #[test]
   fn test_convert_links() {
     let input = r#"<a href="https://example.com">Example</a>"#;
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("[Example](https://example.com)"));
   }
 
@@ -154,7 +146,7 @@ mod tests {
         </ac:task>
       </ac:task-list>
     "#;
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     insta::assert_snapshot!(output, @r###"
     - [ ] Task 1
     - [x] Task 2
@@ -164,7 +156,7 @@ mod tests {
   #[test]
   fn test_convert_image() {
     let input = r#"<ac:image ac:alt="test image"><ri:url ri:value="https://example.com/image.png" /></ac:image>"#;
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("![test image](https://example.com/image.png)"));
   }
 
@@ -177,7 +169,7 @@ mod tests {
         <tr><td>Row 2 Col 1</td><td>Row 2 Col 2</td></tr>
       </table>
     "#;
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     insta::assert_snapshot!(output, @r###"
     | Header 1    | Header 2    |
     | ----------- | ----------- |
@@ -189,7 +181,7 @@ mod tests {
   #[test]
   fn test_convert_table_empty() {
     let input = "<table></table>";
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     // Empty table should produce minimal output
     assert!(!output.contains("|"));
   }
@@ -206,7 +198,7 @@ mod tests {
         <li>Second</li>
       </ol>
     "#;
-    let result = storage_to_markdown(input, 0).unwrap();
+    let result = storage_to_markdown(input).unwrap();
     let output = result.escape_default();
     insta::assert_snapshot!(output, @r"- Item 1\n- Item 2\n\n      \n1. First\n2. Second\n");
   }
@@ -214,7 +206,7 @@ mod tests {
   #[test]
   fn test_convert_code_block() {
     let input = "<pre>function test() {\n  return 42;\n}</pre>";
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("```"));
     assert!(output.contains("function test()"));
   }
@@ -222,21 +214,21 @@ mod tests {
   #[test]
   fn test_convert_inline_code() {
     let input = "<p>Use <code>git commit</code> to save</p>";
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("`git commit`"));
   }
 
   #[test]
   fn test_convert_horizontal_rule() {
     let input = "<p>Before</p><hr /><p>After</p>";
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("---"));
   }
 
   #[test]
   fn test_convert_line_break() {
     let input = "<p>Line 1<br />Line 2</p>";
-    let output = storage_to_markdown(input, 0).unwrap();
+    let output = storage_to_markdown(input).unwrap();
     assert!(output.contains("Line 1\nLine 2"));
   }
 }

@@ -506,7 +506,7 @@ fn test_convert_comprehensive_features_page_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
 
   assert_snapshot!(markdown);
 }
@@ -532,7 +532,7 @@ fn test_convert_meeting_notes_overview_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
 
   assert_snapshot!(markdown);
 }
@@ -558,7 +558,7 @@ fn test_convert_meeting_notes_with_tasks_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
 
   assert_snapshot!(markdown);
 }
@@ -581,7 +581,7 @@ fn test_convert_complex_page_with_code_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
 
   assert_snapshot!(markdown);
 }
@@ -604,7 +604,7 @@ fn test_convert_page_with_internal_links_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
 
   assert_snapshot!(markdown);
 }
@@ -631,7 +631,7 @@ fn test_end_to_end_page_fetch_and_convert() {
     .map(|s| s.value.as_str())
     .expect("Page should have storage content");
 
-  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
 
   assert_snapshot!(markdown);
 }
@@ -642,11 +642,11 @@ fn test_markdown_conversion_handles_empty_content() {
 
   // Test that empty/minimal content doesn't crash
   let empty_storage = "";
-  let result = markdown::storage_to_markdown(empty_storage, 0);
+  let result = markdown::storage_to_markdown(empty_storage);
   assert!(result.is_ok(), "Should handle empty content");
 
   let minimal_storage = "<p>Test</p>";
-  let markdown = markdown::storage_to_markdown(minimal_storage, 0).unwrap();
+  let markdown = markdown::storage_to_markdown(minimal_storage).unwrap();
   assert!(markdown.contains("Test"), "Should contain text");
 }
 
@@ -667,7 +667,7 @@ fn test_markdown_conversion_preserves_structure() {
     .map(|s| s.value.as_str())
     .unwrap();
 
-  let markdown = markdown::storage_to_markdown(storage_content, 0).unwrap();
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
 
   assert_snapshot!(markdown);
 }

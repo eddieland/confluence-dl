@@ -18,49 +18,40 @@ use super::utils::{get_attribute, get_element_text};
 ///
 /// # Arguments
 /// * `element` - The `<ac:emoji>` node to convert.
-/// * `verbose` - Verbosity level that controls trace/debug logging.
 ///
 /// # Returns
 /// The best matching emoji text or an empty string when the element cannot be
 /// resolved.
-pub fn convert_emoji_to_markdown(element: Node, verbose: u8) -> String {
+pub fn convert_emoji_to_markdown(element: Node) -> String {
   let emoji_id = get_attribute(element, "ac:emoji-id");
   let shortcut = get_attribute(element, "ac:shortcut");
   let shortname = get_attribute(element, "ac:shortname").or_else(|| get_attribute(element, "ac:emoji-shortname"));
   let fallback = get_attribute(element, "ac:emoji-fallback");
 
   if let Some(id) = emoji_id.as_deref()
-    && let Some(emoji) = emoji_id_to_unicode(id, verbose)
+    && let Some(emoji) = emoji_id_to_unicode(id)
   {
-    if verbose >= 2 {
-      debug!("Emoji conversion: id={id} -> {emoji}");
-    }
+    debug!("Emoji conversion: id={id} -> {emoji}");
     return emoji;
   }
 
   if let Some(fb) = fallback.as_deref() {
-    if verbose >= 2 {
-      debug!("Emoji fallback: {fb}");
-    }
+    debug!("Emoji fallback: {fb}");
     return fb.to_string();
   }
 
   if let Some(sc) = shortcut.as_deref() {
-    if verbose >= 2 {
-      debug!("Emoji shortcut: {sc}");
-    }
+    debug!("Emoji shortcut: {sc}");
     return sc.to_string();
   }
 
   if let Some(sn) = shortname.as_deref() {
-    if verbose >= 2 {
-      debug!("Emoji shortname: {sn}");
-    }
+    debug!("Emoji shortname: {sn}");
     return sn.to_string();
   }
 
   let text = get_element_text(element);
-  if verbose >= 3 && text.trim().is_empty() {
+  if text.trim().is_empty() {
     trace!("Emoji element with no resolvable content");
   }
   if !text.trim().is_empty() { text } else { String::new() }
@@ -73,12 +64,11 @@ pub fn convert_emoji_to_markdown(element: Node, verbose: u8) -> String {
 ///
 /// # Arguments
 /// * `element` - The span node that may contain emoji metadata attributes.
-/// * `verbose` - Verbosity level that controls trace/debug logging.
 ///
 /// # Returns
 /// `Some(String)` containing the resolved emoji text, or `None` when no emoji
 /// metadata is present.
-pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
+pub fn convert_span_emoji(element: Node) -> Option<String> {
   let emoji_id = get_attribute(element, "data-emoji-id");
   let emoji_shortname = get_attribute(element, "data-emoji-shortname");
   let emoji_fallback = get_attribute(element, "data-emoji-fallback");
@@ -89,37 +79,27 @@ pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
     return None;
   }
 
-  if verbose >= 2 {
-    debug!("Span emoji: id={emoji_id:?}, shortname={emoji_shortname:?}, fallback={emoji_fallback:?}");
-  }
+  debug!("Span emoji: id={emoji_id:?}, shortname={emoji_shortname:?}, fallback={emoji_fallback:?}");
 
   if let Some(id) = emoji_id.as_deref()
-    && let Some(emoji) = emoji_id_to_unicode(id, verbose)
+    && let Some(emoji) = emoji_id_to_unicode(id)
   {
-    if verbose >= 2 {
-      debug!("Span emoji resolved: {id} -> {emoji}");
-    }
+    debug!("Span emoji resolved: {id} -> {emoji}");
     return Some(emoji);
   }
 
   let text = get_element_text(element);
   if !text.trim().is_empty() {
-    if verbose >= 2 {
-      debug!("Span emoji from text: {text}");
-    }
+    debug!("Span emoji from text: {text}");
     return Some(text);
   }
 
   if let Some(shortname) = emoji_shortname.or(emoji_fallback).as_deref() {
-    if verbose >= 2 {
-      debug!("Span emoji from shortname/fallback: {shortname}");
-    }
+    debug!("Span emoji from shortname/fallback: {shortname}");
     return Some(shortname.to_string());
   }
 
-  if verbose >= 3 {
-    trace!("Span emoji with no resolvable content");
-  }
+  trace!("Span emoji with no resolvable content");
 
   None
 }
@@ -132,17 +112,14 @@ pub fn convert_span_emoji(element: Node, verbose: u8) -> Option<String> {
 ///
 /// # Arguments
 /// * `id` - Emoji identifier from Confluence metadata.
-/// * `verbose` - Verbosity level that controls trace/debug logging.
 ///
 /// # Returns
 /// `Some(String)` containing the Unicode emoji when parsing succeeds, or `None`
 /// if the identifier is invalid.
-pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
+pub fn emoji_id_to_unicode(id: &str) -> Option<String> {
   let trimmed = id.trim().trim_start_matches("emoji-").trim_start_matches("emoji/");
   if trimmed.is_empty() {
-    if verbose >= 3 {
-      trace!("Empty emoji ID after trimming: {id}");
-    }
+    trace!("Empty emoji ID after trimming: {id}");
     return None;
   }
 
@@ -158,9 +135,7 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
     let code = match u32::from_str_radix(part, 16) {
       Ok(c) => c,
       Err(e) => {
-        if verbose >= 2 {
-          debug!("Failed to parse emoji hex '{part}': {e}");
-        }
+        debug!("Failed to parse emoji hex '{part}': {e}");
         return None;
       }
     };
@@ -168,9 +143,7 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
     let ch = match char::from_u32(code) {
       Some(c) => c,
       None => {
-        if verbose >= 2 {
-          debug!("Invalid unicode codepoint: U+{code:X}");
-        }
+        debug!("Invalid unicode codepoint: U+{code:X}");
         return None;
       }
     };
@@ -179,14 +152,10 @@ pub fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
   }
 
   if result.is_empty() {
-    if verbose >= 3 {
-      trace!("No valid emoji characters from ID: {id}");
-    }
+    trace!("No valid emoji characters from ID: {id}");
     None
   } else {
-    if verbose >= 2 {
-      debug!("Emoji ID {id} -> {result}");
-    }
+    debug!("Emoji ID {id} -> {result}");
     Some(result)
   }
 }
@@ -207,7 +176,7 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:emoji"))
       .unwrap();
-    let result = convert_emoji_to_markdown(emoji_node, 0);
+    let result = convert_emoji_to_markdown(emoji_node);
     assert_eq!(result, "👋");
   }
 
@@ -220,7 +189,7 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:emoji"))
       .unwrap();
-    let result = convert_emoji_to_markdown(emoji_node, 0);
+    let result = convert_emoji_to_markdown(emoji_node);
     assert_eq!(result, "👩‍💻");
   }
 
@@ -233,14 +202,14 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:emoji"))
       .unwrap();
-    let result = convert_emoji_to_markdown(emoji_node, 0);
+    let result = convert_emoji_to_markdown(emoji_node);
     assert_eq!(result, ":)");
   }
 
   #[test]
   fn test_emoji_id_to_unicode() {
-    assert_eq!(emoji_id_to_unicode("1f44b", 0), Some("👋".to_string()));
-    assert_eq!(emoji_id_to_unicode("1f469-200d-1f4bb", 0), Some("👩‍💻".to_string()));
-    assert_eq!(emoji_id_to_unicode("emoji-1f60a", 0), Some("😊".to_string()));
+    assert_eq!(emoji_id_to_unicode("1f44b"), Some("👋".to_string()));
+    assert_eq!(emoji_id_to_unicode("1f469-200d-1f4bb"), Some("👩‍💻".to_string()));
+    assert_eq!(emoji_id_to_unicode("emoji-1f60a"), Some("😊".to_string()));
   }
 }

@@ -135,7 +135,7 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
 
   // Convert to Markdown
   println!("\n{} {}", colors.info("→"), colors.info("Converting to Markdown"));
-  let mut markdown = markdown::storage_to_markdown(storage_content, cli.behavior.verbose)?;
+  let mut markdown = markdown::storage_to_markdown(storage_content)?;
 
   if cli.behavior.verbose > 0 {
     println!(
@@ -267,7 +267,7 @@ fn download_page_tree(
   }
 
   // Convert to Markdown
-  let mut markdown = markdown::storage_to_markdown(storage_content, cli.behavior.verbose)
+  let mut markdown = markdown::storage_to_markdown(storage_content)
     .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
 
   // Download images if requested

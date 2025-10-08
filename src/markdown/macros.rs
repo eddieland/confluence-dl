@@ -22,12 +22,11 @@ use super::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_attribute,
 /// # Arguments
 /// * `element` - The `<ac:structured-macro>` node to convert.
 /// * `convert_node` - Callback used to recursively render nested nodes.
-/// * `verbose` - Verbosity level that controls trace/debug logging.
 ///
 /// # Returns
 /// A Markdown representation of the macro content. Unknown macros fall back to
 /// returning their text content.
-pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) -> String, verbose: u8) -> String {
+pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node) -> String) -> String {
   let macro_name = get_attribute(element, "ac:name").unwrap_or_default();
 
   match macro_name.as_str() {
@@ -35,7 +34,7 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) 
     "panel" => {
       // Extract rich text body if present
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_node(elem, verbose))
+        .map(convert_node)
         .unwrap_or_else(|| get_element_text(element));
       format!("\n> {}\n\n", body.trim())
     }
@@ -45,12 +44,12 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) 
         .unwrap_or_default();
 
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_node(elem, verbose))
+        .map(convert_node)
         .unwrap_or_else(|| get_element_text(element));
 
       format_admonition_block(&macro_name, title.trim(), body.trim())
     }
-    "code" | "code-block" => format_code_block(element, verbose),
+    "code" | "code-block" => format_code_block(element),
     "status" => {
       let title = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "title")
         .map(get_element_text)
@@ -63,7 +62,7 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) 
         .unwrap_or_else(|| "Details".to_string());
 
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_node(elem, verbose))
+        .map(convert_node)
         .unwrap_or_else(|| get_element_text(element));
 
       format!(
@@ -77,12 +76,12 @@ pub fn convert_macro_to_markdown(element: Node, convert_node: &dyn Fn(Node, u8) 
 
       let result = emoji_id
         .as_deref()
-        .and_then(|id| emoji_id_to_unicode(id.trim(), verbose))
+        .and_then(|id| emoji_id_to_unicode(id.trim()))
         .or_else(|| find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji").map(get_element_text))
         .or_else(|| find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "shortname").map(get_element_text))
         .unwrap_or_default();
 
-      if verbose >= 2 && !result.is_empty() {
+      if !result.is_empty() {
         debug!("Macro emoji: id={emoji_id:?} -> {result}");
       }
       result
@@ -142,16 +141,15 @@ fn format_admonition_block(macro_name: &str, title: &str, body: &str) -> String 
 ///
 /// # Arguments
 /// * `element` - The structured macro node describing the code block.
-/// * `verbose` - Verbosity level that controls trace/debug logging.
 ///
 /// # Returns
 /// A Markdown string using triple backticks and optional language annotation.
-fn format_code_block(element: Node, verbose: u8) -> String {
+fn format_code_block(element: Node) -> String {
   let language = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "language")
     .map(get_element_text)
     .unwrap_or_default();
 
-  if verbose >= 2 && !language.trim().is_empty() {
+  if !language.trim().is_empty() {
     debug!("Code block language: {}", language.trim());
   }
 
@@ -241,18 +239,15 @@ pub fn convert_image_to_markdown(element: Node) -> String {
 ///
 /// # Arguments
 /// * `element` - The `<ac:link>` node to convert.
-/// * `verbose` - Verbosity level that controls trace/debug logging.
 ///
 /// # Returns
 /// Markdown-formatted text representing the link target or mention.
-pub fn convert_confluence_link_to_markdown(element: Node, verbose: u8) -> String {
+pub fn convert_confluence_link_to_markdown(element: Node) -> String {
   // Check for user mention
   if let Some(user_node) = find_child_by_tag(element, "ri:user") {
     let account_id = get_attribute(user_node, "ri:account-id").unwrap_or_default();
 
-    if verbose >= 2 {
-      debug!("User mention: account_id={account_id}");
-    }
+    debug!("User mention: account_id={account_id}");
 
     // Format as @mention with account ID as fallback
     // In the future, we could look up display names via API
@@ -263,9 +258,7 @@ pub fn convert_confluence_link_to_markdown(element: Node, verbose: u8) -> String
   if let Some(page_node) = find_child_by_tag(element, "ri:page") {
     let title = get_attribute(page_node, "ri:content-title").unwrap_or_default();
 
-    if verbose >= 2 {
-      debug!("Page link: title={title}");
-    }
+    debug!("Page link: title={title}");
 
     // Format as wiki-style link
     return format!("[[{title}]]");
@@ -289,7 +282,7 @@ mod tests {
   use crate::markdown::utils::{matches_tag, wrap_with_namespaces};
 
   // Simple converter for tests that doesn't do recursion
-  fn simple_convert_node(node: Node, _verbose: u8) -> String {
+  fn simple_convert_node(node: Node) -> String {
     get_element_text(node)
   }
 
@@ -309,7 +302,7 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, 0);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
     assert!(output.contains("> **Note:** This is a note block."));
   }
 
@@ -322,7 +315,7 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, 0);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
     assert!(output.contains("**Table of Contents**"));
   }
 
@@ -344,7 +337,7 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, 0);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
 
     let expected = "\n```rust\nfn main() {\n  println!(\"hi\");\n}\n```\n\n";
     assert_eq!(output, expected);
@@ -365,7 +358,7 @@ line 2]]></ac:plain-text-body>
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, 0);
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node);
 
     let expected = "\n```\nline 1\nline 2\n```\n\n";
     assert_eq!(output, expected);

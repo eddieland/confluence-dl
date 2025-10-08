@@ -89,11 +89,10 @@ fn format_list_item(item: &str, prefix: &str) -> String {
 ///
 /// # Arguments
 /// * `node` - Root node whose descendants should be rendered.
-/// * `verbose` - Verbosity level that controls trace/debug logging.
 ///
 /// # Returns
 /// A Markdown string representing the element and its descendants.
-pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
+pub fn convert_node_to_markdown(node: Node) -> String {
   let mut result = String::new();
 
   for child in node.children() {
@@ -104,28 +103,16 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
 
         match local_name {
           // Headings
-          "h1" => result.push_str(&format!("\n# {}\n\n", convert_node_to_markdown(child, verbose).trim())),
-          "h2" => result.push_str(&format!("\n## {}\n\n", convert_node_to_markdown(child, verbose).trim())),
-          "h3" => result.push_str(&format!(
-            "\n### {}\n\n",
-            convert_node_to_markdown(child, verbose).trim()
-          )),
-          "h4" => result.push_str(&format!(
-            "\n#### {}\n\n",
-            convert_node_to_markdown(child, verbose).trim()
-          )),
-          "h5" => result.push_str(&format!(
-            "\n##### {}\n\n",
-            convert_node_to_markdown(child, verbose).trim()
-          )),
-          "h6" => result.push_str(&format!(
-            "\n###### {}\n\n",
-            convert_node_to_markdown(child, verbose).trim()
-          )),
+          "h1" => result.push_str(&format!("\n# {}\n\n", convert_node_to_markdown(child).trim())),
+          "h2" => result.push_str(&format!("\n## {}\n\n", convert_node_to_markdown(child).trim())),
+          "h3" => result.push_str(&format!("\n### {}\n\n", convert_node_to_markdown(child).trim())),
+          "h4" => result.push_str(&format!("\n#### {}\n\n", convert_node_to_markdown(child).trim())),
+          "h5" => result.push_str(&format!("\n##### {}\n\n", convert_node_to_markdown(child).trim())),
+          "h6" => result.push_str(&format!("\n###### {}\n\n", convert_node_to_markdown(child).trim())),
 
           // Paragraphs
           "p" => {
-            let content = convert_node_to_markdown(child, verbose);
+            let content = convert_node_to_markdown(child);
             let trimmed = content.trim();
             if !trimmed.is_empty() {
               result.push_str(&format!("{trimmed}\n\n"));
@@ -133,17 +120,17 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           }
 
           // Text formatting
-          "strong" | "b" => result.push_str(&format!("**{}**", convert_node_to_markdown(child, verbose))),
-          "em" | "i" => result.push_str(&format!("_{}_", convert_node_to_markdown(child, verbose))),
-          "u" => result.push_str(&format!("_{}_", convert_node_to_markdown(child, verbose))),
-          "s" | "del" => result.push_str(&format!("~~{}~~", convert_node_to_markdown(child, verbose))),
-          "code" => result.push_str(&format!("`{}`", convert_node_to_markdown(child, verbose))),
+          "strong" | "b" => result.push_str(&format!("**{}**", convert_node_to_markdown(child))),
+          "em" | "i" => result.push_str(&format!("_{}_", convert_node_to_markdown(child))),
+          "u" => result.push_str(&format!("_{}_", convert_node_to_markdown(child))),
+          "s" | "del" => result.push_str(&format!("~~{}~~", convert_node_to_markdown(child))),
+          "code" => result.push_str(&format!("`{}`", convert_node_to_markdown(child))),
 
           // Lists
           "ul" => {
             result.push('\n');
             for li in child.children().filter(|n| matches_tag(*n, "li")) {
-              let item = convert_node_to_markdown(li, verbose);
+              let item = convert_node_to_markdown(li);
               result.push_str(&format_list_item(&item, "- "));
             }
             result.push('\n');
@@ -151,7 +138,7 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
           "ol" => {
             result.push('\n');
             for (index, li) in child.children().filter(|n| matches_tag(*n, "li")).enumerate() {
-              let item = convert_node_to_markdown(li, verbose);
+              let item = convert_node_to_markdown(li);
               let prefix = format!("{}. ", index + 1);
               result.push_str(&format_list_item(&item, &prefix));
             }
@@ -160,7 +147,7 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
 
           // Links
           "a" => {
-            let text = convert_node_to_markdown(child, verbose);
+            let text = convert_node_to_markdown(child);
             let href = get_attribute(child, "href").unwrap_or_default();
             result.push_str(&format!("[{}]({})", text.trim(), href));
           }
@@ -180,10 +167,10 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
 
           // Confluence-specific elements
           "link" if matches_tag(child, "ac:link") => {
-            result.push_str(&convert_confluence_link_to_markdown(child, verbose));
+            result.push_str(&convert_confluence_link_to_markdown(child));
           }
           "structured-macro" if matches_tag(child, "ac:structured-macro") => {
-            result.push_str(&convert_macro_to_markdown(child, &convert_node_to_markdown, verbose));
+            result.push_str(&convert_macro_to_markdown(child, &convert_node_to_markdown));
           }
           "task-list" if matches_tag(child, "ac:task-list") => {
             result.push_str(&convert_task_list_to_markdown(child));
@@ -194,16 +181,16 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
 
           // Layout elements (just extract content)
           "layout" if matches_tag(child, "ac:layout") => {
-            result.push_str(&convert_node_to_markdown(child, verbose));
+            result.push_str(&convert_node_to_markdown(child));
           }
           "layout-section" if matches_tag(child, "ac:layout-section") => {
-            result.push_str(&convert_node_to_markdown(child, verbose));
+            result.push_str(&convert_node_to_markdown(child));
           }
           "layout-cell" if matches_tag(child, "ac:layout-cell") => {
-            result.push_str(&convert_node_to_markdown(child, verbose));
+            result.push_str(&convert_node_to_markdown(child));
           }
           "rich-text-body" if matches_tag(child, "ac:rich-text-body") => {
-            result.push_str(&convert_node_to_markdown(child, verbose));
+            result.push_str(&convert_node_to_markdown(child));
           }
 
           // Skip these internal elements
@@ -228,28 +215,26 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
 
           // Span elements (check for emoji metadata)
           "span" => {
-            if let Some(emoji) = convert_span_emoji(child, verbose) {
+            if let Some(emoji) = convert_span_emoji(child) {
               result.push_str(&emoji);
             } else {
-              result.push_str(&convert_node_to_markdown(child, verbose));
+              result.push_str(&convert_node_to_markdown(child));
             }
           }
 
           // Emoji elements
           "emoji" if matches_tag(child, "ac:emoji") => {
-            result.push_str(&convert_emoji_to_markdown(child, verbose));
+            result.push_str(&convert_emoji_to_markdown(child));
           }
           "emoticon" if matches_tag(child, "ac:emoticon") => {
-            result.push_str(&convert_emoji_to_markdown(child, verbose));
+            result.push_str(&convert_emoji_to_markdown(child));
           }
 
           // Unknown elements - extract content
           _ => {
-            if verbose >= 3 {
-              let debug_name = super::utils::qualified_tag_name(child);
-              debug!("Unknown tag: {debug_name}");
-            }
-            result.push_str(&convert_node_to_markdown(child, verbose));
+            let debug_name = super::utils::qualified_tag_name(child);
+            debug!("Unknown tag: {debug_name}");
+            result.push_str(&convert_node_to_markdown(child));
           }
         }
       }
@@ -270,21 +255,21 @@ pub fn convert_node_to_markdown(node: Node, verbose: u8) -> String {
 mod tests {
   use super::*;
 
-  fn convert_to_markdown(input: &str, verbose: u8) -> String {
+  fn convert_to_markdown(input: &str) -> String {
     use roxmltree::Document;
 
     use crate::markdown::utils::wrap_with_namespaces;
 
     let wrapped = wrap_with_namespaces(input);
     let document = Document::parse(&wrapped).unwrap();
-    let markdown = convert_node_to_markdown(document.root_element(), verbose);
+    let markdown = convert_node_to_markdown(document.root_element());
     crate::markdown::utils::clean_markdown(&markdown)
   }
 
   #[test]
   fn test_convert_headings() {
     let input = "<h1>Title</h1><h2>Subtitle</h2>";
-    let output = convert_to_markdown(input, 0);
+    let output = convert_to_markdown(input);
     assert!(output.contains("# Title"));
     assert!(output.contains("## Subtitle"));
   }
@@ -292,7 +277,7 @@ mod tests {
   #[test]
   fn test_convert_formatting() {
     let input = "<p><strong>bold</strong> <em>italic</em> <s>strike</s></p>";
-    let output = convert_to_markdown(input, 0);
+    let output = convert_to_markdown(input);
     assert!(output.contains("**bold**"));
     assert!(output.contains("_italic_"));
     assert!(output.contains("~~strike~~"));
@@ -301,21 +286,21 @@ mod tests {
   #[test]
   fn test_convert_links() {
     let input = r#"<a href="https://example.com">Example</a>"#;
-    let output = convert_to_markdown(input, 0);
+    let output = convert_to_markdown(input);
     assert!(output.contains("[Example](https://example.com)"));
   }
 
   #[test]
   fn test_convert_time_with_text_content() {
     let input = "<p>Meeting at <time datetime=\"2025-10-07\">October 7, 2025</time></p>";
-    let output = convert_to_markdown(input, 0);
+    let output = convert_to_markdown(input);
     assert!(output.contains("Meeting at October 7, 2025"));
   }
 
   #[test]
   fn test_convert_time_with_datetime_attribute() {
     let input = "<p>Meeting at <time datetime=\"2025-10-07\" /></p>";
-    let output = convert_to_markdown(input, 0);
+    let output = convert_to_markdown(input);
     assert!(output.contains("Meeting at 2025-10-07"));
   }
 
@@ -331,7 +316,7 @@ mod tests {
         <li>Second</li>
       </ol>
     "#;
-    let result = convert_to_markdown(input, 0);
+    let result = convert_to_markdown(input);
     // Multiline inline snapshots with funky spacing confuse rustfmt, so keep this
     // escaped.
     let output = result.escape_default();
@@ -355,7 +340,7 @@ mod tests {
       </ul>
     "#;
 
-    let result = convert_to_markdown(input, 0);
+    let result = convert_to_markdown(input);
     let output = result.escape_default();
 
     insta::assert_snapshot!(
@@ -367,7 +352,7 @@ mod tests {
   #[test]
   fn test_convert_code_block() {
     let input = "<pre>function test() {\n  return 42;\n}</pre>";
-    let output = convert_to_markdown(input, 0);
+    let output = convert_to_markdown(input);
     assert!(output.contains("```"));
     assert!(output.contains("function test()"));
   }
@@ -375,7 +360,7 @@ mod tests {
   #[test]
   fn test_convert_inline_code() {
     let input = "<p>Use <code>git commit</code> to save</p>";
-    let output = convert_to_markdown(input, 0);
+    let output = convert_to_markdown(input);
     assert!(output.contains("`git commit`"));
   }
 }
