@@ -1,92 +1,4 @@
-//! Credentials management for Confluence authentication.
-//!
-//! This module provides a trait-based interface for retrieving credentials
-//! from various sources. The default implementation uses `.netrc` files.
-//!
-//! # Atlassian API Tokens
-//!
-//! Atlassian Cloud requires **API tokens** for authentication, not traditional
-//! passwords. You must create an API token at: <https://id.atlassian.com/manage-profile/security/api-tokens>
-//!
-//! Store your credentials in `~/.netrc`:
-//! ```text
-//! machine your-instance.atlassian.net
-//!   login your.email@example.com
-//!   password your-api-token-here
-//! ```
-//!
-//! **Important**: Use your email address as the login and your API token as the
-//! password.
-
-use std::fmt;
-
-/// Represents a set of credentials for authenticating with a host.
-///
-/// For Atlassian Cloud/Confluence:
-/// - `username` should be your email address
-/// - `password` should be your API token (created at <https://id.atlassian.com/manage-profile/security/api-tokens>)
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Credential {
-  /// The username for authentication (email address for Atlassian Cloud)
-  pub username: String,
-  /// The password or API token for authentication
-  pub password: String,
-}
-
-/// Errors that can occur during credential operations.
-#[derive(Debug)]
-pub enum CredentialError {
-  /// The .netrc file could not be found or read
-  NetrcNotFound,
-  /// The .netrc file is malformed or could not be parsed
-  #[allow(dead_code)]
-  NetrcParseError(String),
-  /// An I/O error occurred while reading credentials
-  IoError(std::io::Error),
-}
-
-impl fmt::Display for CredentialError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::NetrcNotFound => write!(f, ".netrc file not found"),
-      Self::NetrcParseError(msg) => write!(f, "failed to parse .netrc: {msg}"),
-      Self::IoError(err) => write!(f, "I/O error: {err}"),
-    }
-  }
-}
-
-impl std::error::Error for CredentialError {
-  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-    match self {
-      Self::IoError(err) => Some(err),
-      _ => None,
-    }
-  }
-}
-
-impl From<std::io::Error> for CredentialError {
-  fn from(err: std::io::Error) -> Self {
-    Self::IoError(err)
-  }
-}
-
-/// A provider for retrieving credentials.
-///
-/// This trait allows different credential sources to be used interchangeably.
-pub trait CredentialsProvider {
-  /// Retrieves credentials for the specified host.
-  ///
-  /// # Arguments
-  ///
-  /// * `host` - The hostname to retrieve credentials for
-  ///
-  /// # Returns
-  ///
-  /// * `Ok(Some(Credential))` if credentials were found
-  /// * `Ok(None)` if no credentials exist for this host
-  /// * `Err(CredentialError)` if an error occurred
-  fn get_credentials(&self, host: &str) -> Result<Option<Credential>, CredentialError>;
-}
+use super::{Credential, CredentialError, CredentialsProvider};
 
 /// A credentials provider that reads from `.netrc` files.
 ///
@@ -609,7 +521,7 @@ machine example.com
   }
 
   #[test]
-  fn test_parse_netrc_unicode_in_credentials() {
+  fn test_parse_netrc_unicode_support() {
     let content = r#"
 machine example.com
   login user_日本語
