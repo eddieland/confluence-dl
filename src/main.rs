@@ -431,7 +431,7 @@ fn download_page_tree(
     .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
 
   // Convert to Markdown
-  let mut markdown = markdown::storage_to_markdown(storage_content)?;
+  let mut markdown = markdown::storage_to_markdown(storage_content, cli.behavior.verbose)?;
 
   // Download images if requested
   if cli.images_links.download_images {
@@ -576,7 +576,7 @@ fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::R
 
   // Convert to Markdown
   println!("\n{} {}", colors.info("→"), colors.info("Converting to Markdown"));
-  let mut markdown = markdown::storage_to_markdown(storage_content)?;
+  let mut markdown = markdown::storage_to_markdown(storage_content, cli.behavior.verbose)?;
 
   if cli.behavior.verbose > 0 {
     println!(

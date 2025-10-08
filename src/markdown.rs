@@ -10,12 +10,12 @@ use scraper::{Html, Node, Selector};
 ///
 /// This implementation uses proper HTML parsing to handle Confluence's
 /// complex XML/HTML structure.
-pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
+pub fn storage_to_markdown(storage_content: &str, verbose: u8) -> Result<String> {
   // Parse the HTML/XML content
   let document = Html::parse_document(storage_content);
 
   // Convert to markdown
-  let markdown = convert_element_to_markdown(&document.root_element());
+  let markdown = convert_element_to_markdown(&document.root_element(), verbose);
 
   // Clean up the result
   let cleaned = clean_markdown(&markdown);
@@ -24,7 +24,7 @@ pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
 }
 
 /// Convert an element and its children to markdown recursively
-fn convert_element_to_markdown(element: &scraper::ElementRef) -> String {
+fn convert_element_to_markdown(element: &scraper::ElementRef, verbose: u8) -> String {
   let mut result = String::new();
 
   for child in element.children() {
@@ -44,7 +44,7 @@ fn convert_element_to_markdown(element: &scraper::ElementRef) -> String {
 
             // Paragraphs
             "p" => {
-              let content = convert_element_to_markdown(&child_element);
+              let content = convert_element_to_markdown(&child_element, verbose);
               let trimmed = content.trim();
               if !trimmed.is_empty() {
                 result.push_str(&format!("{trimmed}\n\n"));
@@ -98,7 +98,7 @@ fn convert_element_to_markdown(element: &scraper::ElementRef) -> String {
 
             // Confluence-specific macros
             "ac:structured-macro" => {
-              result.push_str(&convert_macro_to_markdown(&child_element));
+              result.push_str(&convert_macro_to_markdown(&child_element, verbose));
             }
 
             // Confluence task lists
@@ -113,7 +113,7 @@ fn convert_element_to_markdown(element: &scraper::ElementRef) -> String {
 
             // Layout sections (just extract content)
             "ac:layout" | "ac:layout-section" | "ac:layout-cell" | "ac:rich-text-body" => {
-              result.push_str(&convert_element_to_markdown(&child_element));
+              result.push_str(&convert_element_to_markdown(&child_element, verbose));
             }
 
             // Skip these Confluence-specific tags
@@ -126,21 +126,24 @@ fn convert_element_to_markdown(element: &scraper::ElementRef) -> String {
 
             // Span elements - just extract content
             "span" => {
-              if let Some(emoji) = convert_span_emoji(&child_element) {
+              if let Some(emoji) = convert_span_emoji(&child_element, verbose) {
                 result.push_str(&emoji);
               } else {
-                result.push_str(&convert_element_to_markdown(&child_element));
+                result.push_str(&convert_element_to_markdown(&child_element, verbose));
               }
             }
 
             // Emojis
             "ac:emoji" | "ac:emoticon" => {
-              result.push_str(&convert_emoji_to_markdown(&child_element));
+              result.push_str(&convert_emoji_to_markdown(&child_element, verbose));
             }
 
             // Default: recurse into children
             _ => {
-              result.push_str(&convert_element_to_markdown(&child_element));
+              if verbose >= 3 {
+                eprintln!("[DEBUG] Unknown tag: {tag_name}");
+              }
+              result.push_str(&convert_element_to_markdown(&child_element, verbose));
             }
           }
         }
@@ -179,7 +182,7 @@ fn get_element_text(element: &scraper::ElementRef) -> String {
 }
 
 /// Convert Confluence structured macros to markdown
-fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
+fn convert_macro_to_markdown(element: &scraper::ElementRef, verbose: u8) -> String {
   let macro_name = element.value().attr("ac:name").unwrap_or("");
 
   match macro_name {
@@ -188,7 +191,7 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
       // Extract rich text body if present - iterate children since namespaced
       // elements aren't valid CSS selectors
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_element_to_markdown(&elem))
+        .map(|elem| convert_element_to_markdown(&elem, verbose))
         .unwrap_or_else(|| get_element_text(element));
       format!("\n> {}\n\n", body.trim())
     }
@@ -198,7 +201,7 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
         .unwrap_or_default();
 
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_element_to_markdown(&elem))
+        .map(|elem| convert_element_to_markdown(&elem, verbose))
         .unwrap_or_else(|| get_element_text(element));
 
       format_admonition_block(macro_name, title.trim(), body.trim())
@@ -215,7 +218,7 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
         .unwrap_or_else(|| "Details".to_string());
 
       let body = find_child_by_tag(element, "ac:rich-text-body")
-        .map(|elem| convert_element_to_markdown(&elem))
+        .map(|elem| convert_element_to_markdown(&elem, verbose))
         .unwrap_or_else(|| get_element_text(element));
 
       format!(
@@ -224,17 +227,27 @@ fn convert_macro_to_markdown(element: &scraper::ElementRef) -> String {
         body.trim()
       )
     }
-    "emoji" => find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji-id")
-      .map(|e| e.text().collect::<String>())
-      .and_then(|id| emoji_id_to_unicode(id.trim()))
-      .or_else(|| {
-        find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji").map(|e| e.text().collect::<String>())
-      })
-      .or_else(|| {
-        find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "shortname")
-          .map(|e| e.text().collect::<String>())
-      })
-      .unwrap_or_default(),
+    "emoji" => {
+      let emoji_id = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji-id")
+        .map(|e| e.text().collect::<String>());
+
+      let result = emoji_id
+        .as_deref()
+        .and_then(|id| emoji_id_to_unicode(id.trim(), verbose))
+        .or_else(|| {
+          find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "emoji").map(|e| e.text().collect::<String>())
+        })
+        .or_else(|| {
+          find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "shortname")
+            .map(|e| e.text().collect::<String>())
+        })
+        .unwrap_or_default();
+
+      if verbose >= 2 && !result.is_empty() {
+        eprintln!("[DEBUG] Macro emoji: id={emoji_id:?} -> {result}");
+      }
+      result
+    }
     "anchor" => String::new(), // Skip anchors
     _ => {
       // For unknown macros, just extract the text content
@@ -353,66 +366,102 @@ fn convert_image_to_markdown(element: &scraper::ElementRef) -> String {
 }
 
 /// Convert an emoji element to markdown by resolving its codepoint
-fn convert_emoji_to_markdown(element: &scraper::ElementRef) -> String {
-  if let Some(id) = element.value().attr("ac:emoji-id")
-    && let Some(emoji) = emoji_id_to_unicode(id)
+fn convert_emoji_to_markdown(element: &scraper::ElementRef, verbose: u8) -> String {
+  let emoji_id = element.value().attr("ac:emoji-id");
+  let shortcut = element.value().attr("ac:shortcut");
+  let shortname = element
+    .value()
+    .attr("ac:shortname")
+    .or_else(|| element.value().attr("ac:emoji-shortname"));
+
+  if let Some(id) = emoji_id
+    && let Some(emoji) = emoji_id_to_unicode(id, verbose)
   {
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Emoji conversion: id={id} -> {emoji}");
+    }
     return emoji;
   }
 
-  if let Some(shortcut) = element.value().attr("ac:shortcut") {
-    return shortcut.to_string();
+  if let Some(sc) = shortcut {
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Emoji shortcut: {sc}");
+    }
+    return sc.to_string();
   }
 
-  if let Some(shortname) = element
-    .value()
-    .attr("ac:shortname")
-    .or_else(|| element.value().attr("ac:emoji-shortname"))
-  {
-    return shortname.to_string();
+  if let Some(sn) = shortname {
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Emoji shortname: {sn}");
+    }
+    return sn.to_string();
   }
 
   let text = get_element_text(element);
+  if verbose >= 3 && text.trim().is_empty() {
+    eprintln!("[DEBUG] Emoji element with no resolvable content");
+  }
   if !text.trim().is_empty() { text } else { String::new() }
 }
 
 /// Try to resolve emoji metadata stored on span elements
-fn convert_span_emoji(element: &scraper::ElementRef) -> Option<String> {
+fn convert_span_emoji(element: &scraper::ElementRef, verbose: u8) -> Option<String> {
   let value = element.value();
 
-  let has_metadata = value.attr("data-emoji-id").is_some()
-    || value.attr("data-emoji-shortname").is_some()
-    || value.attr("data-emoji-fallback").is_some();
+  let emoji_id = value.attr("data-emoji-id");
+  let emoji_shortname = value.attr("data-emoji-shortname");
+  let emoji_fallback = value.attr("data-emoji-fallback");
+
+  let has_metadata = emoji_id.is_some() || emoji_shortname.is_some() || emoji_fallback.is_some();
 
   if !has_metadata {
     return None;
   }
 
-  if let Some(id) = value.attr("data-emoji-id")
-    && let Some(emoji) = emoji_id_to_unicode(id)
+  if verbose >= 2 {
+    eprintln!(
+      "[DEBUG] Span emoji: id={emoji_id:?}, shortname={emoji_shortname:?}, fallback={emoji_fallback:?}"
+    );
+  }
+
+  if let Some(id) = emoji_id
+    && let Some(emoji) = emoji_id_to_unicode(id, verbose)
   {
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Span emoji resolved: {id} -> {emoji}");
+    }
     return Some(emoji);
   }
 
   let text = get_element_text(element);
   if !text.trim().is_empty() {
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Span emoji from text: {text}");
+    }
     return Some(text);
   }
 
-  if let Some(shortname) = value
-    .attr("data-emoji-shortname")
-    .or_else(|| value.attr("data-emoji-fallback"))
-  {
+  if let Some(shortname) = emoji_shortname.or(emoji_fallback) {
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Span emoji from shortname/fallback: {shortname}");
+    }
     return Some(shortname.to_string());
+  }
+
+  if verbose >= 3 {
+    eprintln!("[DEBUG] Span emoji with no resolvable content");
   }
 
   None
 }
 
 /// Convert an emoji identifier like "1f44b" or "1f469-200d-1f4bb" into unicode
-fn emoji_id_to_unicode(id: &str) -> Option<String> {
+fn emoji_id_to_unicode(id: &str, verbose: u8) -> Option<String> {
   let trimmed = id.trim().trim_start_matches("emoji-").trim_start_matches("emoji/");
   if trimmed.is_empty() {
+    if verbose >= 3 {
+      eprintln!("[DEBUG] Empty emoji ID after trimming: {id}");
+    }
     return None;
   }
 
@@ -425,12 +474,40 @@ fn emoji_id_to_unicode(id: &str) -> Option<String> {
       continue;
     }
 
-    let code = u32::from_str_radix(part, 16).ok()?;
-    let ch = char::from_u32(code)?;
+    let code = match u32::from_str_radix(part, 16) {
+      Ok(c) => c,
+      Err(e) => {
+        if verbose >= 2 {
+          eprintln!("[DEBUG] Failed to parse emoji hex '{part}': {e}");
+        }
+        return None;
+      }
+    };
+
+    let ch = match char::from_u32(code) {
+      Some(c) => c,
+      None => {
+        if verbose >= 2 {
+          eprintln!("[DEBUG] Invalid unicode codepoint: U+{code:X}");
+        }
+        return None;
+      }
+    };
+
     result.push(ch);
   }
 
-  if result.is_empty() { None } else { Some(result) }
+  if result.is_empty() {
+    if verbose >= 3 {
+      eprintln!("[DEBUG] No valid emoji characters from ID: {id}");
+    }
+    None
+  } else {
+    if verbose >= 2 {
+      eprintln!("[DEBUG] Emoji ID {id} -> {result}");
+    }
+    Some(result)
+  }
 }
 
 /// Convert HTML table to markdown table
@@ -630,7 +707,7 @@ mod tests {
   #[test]
   fn test_convert_headings() {
     let input = "<h1>Title</h1><h2>Subtitle</h2>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("# Title"));
     assert!(output.contains("## Subtitle"));
   }
@@ -638,7 +715,7 @@ mod tests {
   #[test]
   fn test_convert_formatting() {
     let input = "<p><strong>bold</strong> <em>italic</em> <s>strike</s></p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("**bold**"));
     assert!(output.contains("_italic_"));
     assert!(output.contains("~~strike~~"));
@@ -654,14 +731,14 @@ mod tests {
       </ac:structured-macro>
     "#;
 
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("> **Note:** This is a note block."));
   }
 
   #[test]
   fn test_convert_links() {
     let input = r#"<a href="https://example.com">Example</a>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("[Example](https://example.com)"));
   }
 
@@ -679,7 +756,7 @@ mod tests {
         </ac:task>
       </ac:task-list>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     insta::assert_snapshot!(output, @r###"
     - [ ] Task 1
     - [x] Task 2
@@ -689,7 +766,7 @@ mod tests {
   #[test]
   fn test_convert_image() {
     let input = r#"<ac:image ac:alt="test image"><ri:url ri:value="https://example.com/image.png" /></ac:image>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("![test image](https://example.com/image.png)"));
   }
 
@@ -702,7 +779,7 @@ mod tests {
         <tr><td>Row 2 Col 1</td><td>Row 2 Col 2</td></tr>
       </table>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     insta::assert_snapshot!(output, @r###"
     | Header 1    | Header 2    |
     | ----------- | ----------- |
@@ -714,7 +791,7 @@ mod tests {
   #[test]
   fn test_convert_table_empty() {
     let input = "<table></table>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     // Empty table should produce minimal output
     assert!(!output.contains("|"));
   }
@@ -731,7 +808,7 @@ mod tests {
         <li>Second</li>
       </ol>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     insta::assert_snapshot!(output, @r"
     - Item 1
     - Item 2
@@ -745,7 +822,7 @@ mod tests {
   #[test]
   fn test_convert_code_block() {
     let input = "<pre>function test() {\n  return 42;\n}</pre>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("```"));
     assert!(output.contains("function test()"));
   }
@@ -753,28 +830,28 @@ mod tests {
   #[test]
   fn test_convert_inline_code() {
     let input = "<p>Use <code>git commit</code> to save</p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("`git commit`"));
   }
 
   #[test]
   fn test_convert_horizontal_rule() {
     let input = "<p>Before</p><hr /><p>After</p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("---"));
   }
 
   #[test]
   fn test_convert_line_break() {
     let input = "<p>Line 1<br />Line 2</p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("Line 1\nLine 2"));
   }
 
   #[test]
   fn test_convert_macro_toc() {
     let input = r#"<ac:structured-macro ac:name="toc"></ac:structured-macro>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("**Table of Contents**"));
   }
 
@@ -787,7 +864,7 @@ mod tests {
         </ac:rich-text-body>
       </ac:structured-macro>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     insta::assert_snapshot!(output, @r###"
     > Panel content here
     "###);
@@ -800,7 +877,7 @@ mod tests {
         <ac:parameter ac:name="title">In Progress</ac:parameter>
       </ac:structured-macro>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("`[In Progress]`"));
   }
 
@@ -814,7 +891,7 @@ mod tests {
         </ac:rich-text-body>
       </ac:structured-macro>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     insta::assert_snapshot!(output, @r###"
     <details>
     <summary>Click to expand</summary>
@@ -833,14 +910,14 @@ mod tests {
         </ac:rich-text-body>
       </ac:structured-macro>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("<summary>Details</summary>"));
   }
 
   #[test]
   fn test_convert_macro_anchor() {
     let input = r#"<ac:structured-macro ac:name="anchor"><ac:parameter ac:name="name">section1</ac:parameter></ac:structured-macro>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     // Anchor should produce empty output
     assert!(!output.contains("anchor"));
   }
@@ -848,7 +925,7 @@ mod tests {
   #[test]
   fn test_convert_macro_unknown() {
     let input = r#"<ac:structured-macro ac:name="unknown-macro">Some text content</ac:structured-macro>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     // Unknown macros should extract text content
     assert!(output.contains("Some text content"));
   }
@@ -856,14 +933,14 @@ mod tests {
   #[test]
   fn test_convert_underline() {
     let input = "<p><u>underlined text</u></p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("_underlined text_"));
   }
 
   #[test]
   fn test_convert_strikethrough() {
     let input = "<p><s>strike</s> and <del>delete</del></p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     insta::assert_snapshot!(output, @"~~strike~~ and ~~delete~~");
   }
 
@@ -878,14 +955,14 @@ mod tests {
         </ac:layout-section>
       </ac:layout>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     insta::assert_snapshot!(output, @"Cell content");
   }
 
   #[test]
   fn test_convert_rich_text_body() {
     let input = r#"<ac:rich-text-body><p>Rich text</p></ac:rich-text-body>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("Rich text"));
   }
 
@@ -914,35 +991,35 @@ mod tests {
   #[test]
   fn test_convert_image_without_url() {
     let input = r#"<ac:image ac:alt="no url"></ac:image>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("![no url]()"));
   }
 
   #[test]
   fn test_convert_image_without_alt() {
     let input = r#"<ac:image><ri:url ri:value="https://example.com/img.png" /></ac:image>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("![image](https://example.com/img.png)"));
   }
 
   #[test]
   fn test_convert_confluence_emoji_from_id() {
     let input = r#"<p>Hello <ac:emoji ac:emoji-id="1f44b" /></p>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("Hello 👋"));
   }
 
   #[test]
   fn test_convert_confluence_emoji_multi_codepoint() {
     let input = r#"<p><ac:emoji ac:emoji-id="1f469-200d-1f4bb" /></p>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("👩‍💻"));
   }
 
   #[test]
   fn test_convert_confluence_emoji_shortcut_fallback() {
     let input = r#"<p><ac:emoji ac:shortcut=":)" /></p>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains(":)"));
   }
 
@@ -953,21 +1030,21 @@ mod tests {
         <ac:parameter ac:name="emoji-id">1f60a</ac:parameter>
       </ac:structured-macro>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("😊"));
   }
 
   #[test]
   fn test_convert_span_extracts_content() {
     let input = "<p><span>Span content</span></p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     assert!(output.contains("Span content"));
   }
 
   #[test]
   fn test_convert_empty_paragraph() {
     let input = "<p></p><p>   </p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = storage_to_markdown(input, 0).unwrap();
     // Empty paragraphs should not produce extra newlines
     assert!(!output.contains("\n\n\n"));
   }
