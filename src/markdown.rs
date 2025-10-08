@@ -419,9 +419,7 @@ fn convert_span_emoji(element: &scraper::ElementRef, verbose: u8) -> Option<Stri
   }
 
   if verbose >= 2 {
-    eprintln!(
-      "[DEBUG] Span emoji: id={emoji_id:?}, shortname={emoji_shortname:?}, fallback={emoji_fallback:?}"
-    );
+    eprintln!("[DEBUG] Span emoji: id={emoji_id:?}, shortname={emoji_shortname:?}, fallback={emoji_fallback:?}");
   }
 
   if let Some(id) = emoji_id
