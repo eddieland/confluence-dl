@@ -1,0 +1,48 @@
+name: "Feature request"
+description: "Suggest an enhancement for confluence-dl"
+title: "[Feature]: "
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to make **confluence-dl** better? Let us know how it would help you.
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I have searched existing issues and discussions for similar ideas.
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Provide a concise description of the feature or improvement.
+      placeholder: I would like confluence-dl to...
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Explain the problem this solves or the workflow it improves.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe how you envision the feature working, including CLI flags or outputs if relevant.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you tried any workarounds or other tools?
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Share any sketches, pseudo-code, or references that could help.
