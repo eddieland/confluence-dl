@@ -56,6 +56,18 @@ curl -fL https://github.com/eddieland/confluence-dl/releases/download/v${VERSION
 curl -fL https://github.com/eddieland/confluence-dl/releases/download/v${VERSION}/confluence-dl-macos-x86_64-v${VERSION}.tar.gz | tar -xz && sudo cp confluence-dl /usr/local/bin/ && sudo chmod +x /usr/local/bin/confluence-dl && rm confluence-dl
 ```
 
+### OCI / Docker Image
+
+```bash
+docker pull ghcr.io/eddieland/confluence-dl:v${VERSION}
+```
+
+Run the CLI directly from the container:
+
+```bash
+docker run --rm ghcr.io/eddieland/confluence-dl:v${VERSION} --help
+```
+
 ## Verify Installation
 
 ```bash

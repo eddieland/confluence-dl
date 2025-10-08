@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write # For creating releases
   actions: read # For artifact downloads
+  packages: write # For publishing container images
 
 jobs:
   validate-version:
@@ -92,7 +93,7 @@ jobs:
   create-release:
     name: Create Release
     if: success()
-    needs: [validate-version, build-ubuntu, build-macos]
+    needs: [validate-version, build-ubuntu, build-macos, publish-container]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -141,3 +142,84 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: false
+
+  publish-container:
+    name: Publish Container Image
+    needs: validate-version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/confluence-dl
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-musl-${{ hashFiles('**/Cargo.lock') }}
+          target-dir: target
+
+      - name: Build static binary
+        env:
+          RUSTFLAGS: "-C strip=symbols"
+        run: cargo build --release --bin confluence-dl --target x86_64-unknown-linux-musl
+
+      - name: Prepare artifacts
+        id: artifacts
+        run: |
+          mkdir -p dist
+          cp target/x86_64-unknown-linux-musl/release/confluence-dl dist/confluence-dl
+          chmod +x dist/confluence-dl
+          SHA256=$(sha256sum dist/confluence-dl | awk '{print $1}')
+          printf "%s  confluence-dl\n" "$SHA256" > dist/confluence-dl.sha256
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=confluence-dl
+            org.opencontainers.image.description=CLI utility for exporting Confluence content to Markdown
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.licenses=MIT
+            io.confluence-dl.binary.checksum=${{ steps.artifacts.outputs.sha256 }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BINARY_PATH=dist/confluence-dl
+            CHECKSUM_PATH=dist/confluence-dl.sha256
