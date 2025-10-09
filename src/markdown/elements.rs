@@ -90,6 +90,8 @@ fn format_list_item(item: &str, prefix: &str) -> String {
 ///
 /// # Arguments
 /// * `node` - Root node whose descendants should be rendered.
+/// * `options` - Conversion behaviour flags that control optional features,
+///   such as anchor preservation.
 ///
 /// # Returns
 /// A Markdown string representing the element and its descendants.

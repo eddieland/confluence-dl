@@ -5,9 +5,15 @@
 
 /// Replace common HTML entities with Unicode characters before XML parsing.
 ///
-/// roxmltree only recognizes XML's 5 predefined entities (&lt; &gt; &amp;
-/// &quot; &apos;) so we need to convert HTML entities to literal characters or
-/// numeric references.
+/// `roxmltree` only recognizes XML's 5 predefined entities (`&lt;`, `&gt;`,
+/// `&amp;`, `&quot;`, `&apos;`), so we need to convert HTML entities to literal
+/// characters or numeric references.
+///
+/// # Arguments
+/// * `text` - Raw storage-format markup that may contain HTML entities.
+///
+/// # Returns
+/// A `String` with common HTML entities replaced by literal characters.
 pub fn preprocess_html_entities(text: &str) -> String {
   text
     .replace("&nbsp;", "\u{00A0}") // non-breaking space
@@ -40,6 +46,12 @@ pub fn preprocess_html_entities(text: &str) -> String {
 ///
 /// This handles both named entities and numeric entities (decimal and
 /// hexadecimal).
+///
+/// # Arguments
+/// * `text` - Text that may contain HTML entity references.
+///
+/// # Returns
+/// A `String` with entity references expanded into their Unicode characters.
 pub fn decode_html_entities(text: &str) -> String {
   let replaced = text
     .replace("&nbsp;", " ")
@@ -63,6 +75,13 @@ pub fn decode_html_entities(text: &str) -> String {
 /// Decode numeric HTML entities so emoji references render properly.
 ///
 /// Supports both decimal (`&#128075;`) and hexadecimal (`&#x1F44B;`) formats.
+///
+/// # Arguments
+/// * `text` - Text that may contain numeric HTML entities.
+///
+/// # Returns
+/// A `String` where numeric entity references are replaced with their
+/// characters.
 fn decode_numeric_html_entities(text: &str) -> String {
   let mut result = String::with_capacity(text.len());
   let mut index = 0;
@@ -89,6 +108,12 @@ fn decode_numeric_html_entities(text: &str) -> String {
 }
 
 /// Decode a single numeric HTML entity (without the `&` and `;`).
+///
+/// # Arguments
+/// * `entity` - Numeric entity body such as `#128075` or `#x1F44B`.
+///
+/// # Returns
+/// `Some(String)` containing the decoded character, or `None` if parsing fails.
 fn decode_numeric_entity(entity: &str) -> Option<String> {
   let body = entity.strip_prefix('#')?;
 

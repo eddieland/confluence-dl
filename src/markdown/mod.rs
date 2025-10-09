@@ -19,7 +19,7 @@
 //! use confluence_dl::markdown::storage_to_markdown;
 //!
 //! let confluence_html = r#"<h1>Title</h1><p><strong>Bold text</strong></p>"#;
-//! let markdown = storage_to_markdown(confluence_html, 0).unwrap();
+//! let markdown = storage_to_markdown(confluence_html).unwrap();
 //! assert!(markdown.contains("# Title"));
 //! assert!(markdown.contains("**Bold text**"));
 //! ```
@@ -46,18 +46,20 @@ pub struct MarkdownOptions {
   pub preserve_anchors: bool,
 }
 
-/// Convert Confluence storage format to Markdown.
+/// Convert Confluence storage format to Markdown with default options.
 ///
 /// This implementation uses proper HTML parsing to handle Confluence's
 /// complex XML/HTML structure.
 ///
 /// # Arguments
 ///
-/// * `storage_content` - The Confluence storage format content (XHTML)
+/// * `storage_content` - The Confluence storage format content (XHTML) to
+///   convert.
 ///
 /// # Returns
 ///
-/// The converted Markdown content, or an error if parsing fails.
+/// `Result<String>` containing the converted Markdown content, or an error if
+/// parsing fails.
 ///
 /// # Examples
 ///
@@ -72,6 +74,18 @@ pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
 }
 
 /// Convert Confluence storage format to Markdown using the provided options.
+///
+/// # Arguments
+///
+/// * `storage_content` - The Confluence storage format content (XHTML) to
+///   convert.
+/// * `options` - Conversion behaviour flags that control optional features,
+///   such as anchor preservation.
+///
+/// # Returns
+///
+/// `Result<String>` containing the converted Markdown content, or an error if
+/// parsing fails.
 pub fn storage_to_markdown_with_options(storage_content: &str, options: &MarkdownOptions) -> Result<String> {
   // Pre-process: Replace HTML entities with numeric character references
   // roxmltree only supports XML's 5 predefined entities, not HTML entities
