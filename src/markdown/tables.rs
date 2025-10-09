@@ -58,21 +58,36 @@ pub fn convert_table_to_markdown(element: Node) -> String {
     }
   }
 
+  render_markdown_table(rows).unwrap_or_default()
+}
+
+/// Pretty-print Markdown tables with aligned columns.
+///
+/// Accepts a collection of rows (each a vector of cell strings) and formats
+/// them into a Markdown table with padded columns. The first row is treated as
+/// the header.
+///
+/// # Arguments
+/// * `rows` - Table rows in display order.
+///
+/// # Returns
+/// `Some(String)` containing the rendered Markdown table (surrounded by leading
+/// and trailing newlines) or `None` when the supplied rows are insufficient to
+/// produce a valid table.
+pub fn render_markdown_table(mut rows: Vec<Vec<String>>) -> Option<String> {
   if rows.is_empty() {
-    return String::new();
+    return None;
   }
 
-  let column_count = rows.iter().map(|row| row.len()).max().unwrap_or(0);
+  let column_count = rows.iter().map(|row| row.len()).max()?;
   if column_count == 0 {
-    return String::new();
+    return None;
   }
 
-  // Normalize row lengths
   for row in &mut rows {
     row.resize(column_count, String::new());
   }
 
-  // Calculate column widths for alignment
   let mut column_widths = vec![0; column_count];
   for row in &rows {
     for (index, cell) in row.iter().enumerate() {
@@ -83,11 +98,9 @@ pub fn convert_table_to_markdown(element: Node) -> String {
   let mut result = String::new();
   result.push('\n');
 
-  // Format header row
   if let Some(first_row) = rows.first() {
     result.push_str(&format_row(first_row, &column_widths));
 
-    // Add separator row
     result.push('|');
     for width in &column_widths {
       let dash_count = (*width).max(3);
@@ -99,13 +112,12 @@ pub fn convert_table_to_markdown(element: Node) -> String {
     result.push('\n');
   }
 
-  // Format data rows
   for row in rows.iter().skip(1) {
     result.push_str(&format_row(row, &column_widths));
   }
 
   result.push('\n');
-  result
+  Some(result)
 }
 
 /// Format a single table row with proper column alignment.

@@ -4,7 +4,7 @@ expression: markdown
 ---
 # Team Responsibilities
 
-|   |   |
-| --- | --- |
-| **Frontend**: Owns the web experience. | **Backend**: Maintains APIs and services. |
-| **DevOps**: Ensures reliable deployments. | **QA**: Guards product quality. |
+|                                           |                                           |
+| ----------------------------------------- | ----------------------------------------- |
+| **Frontend**: Owns the web experience.    | **Backend**: Maintains APIs and services. |
+| **DevOps**: Ensures reliable deployments. | **QA**: Guards product quality.           |

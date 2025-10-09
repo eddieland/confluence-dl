@@ -13,7 +13,7 @@ use super::macros::{
   convert_adf_extension_to_markdown, convert_confluence_link_to_markdown, convert_image_to_markdown,
   convert_macro_to_markdown, convert_task_list_to_markdown,
 };
-use super::tables::convert_table_to_markdown;
+use super::tables::{convert_table_to_markdown, render_markdown_table};
 use super::utils::{get_attribute, get_element_text, matches_tag};
 
 /// Checks whether a line appears to start with a Markdown list marker.
@@ -195,24 +195,18 @@ fn convert_layout_to_markdown(layout: Node, options: &MarkdownOptions) -> String
     }
   }
 
-  let header_cells: Vec<&str> = std::iter::repeat_n(" ", max_columns).collect();
-  let separator_cells: Vec<&str> = std::iter::repeat_n("---", max_columns).collect();
-
-  let mut markdown = String::new();
-  markdown.push('\n');
-  markdown.push_str(&format!("| {} |\n", header_cells.join(" | ")));
-  markdown.push_str(&format!("| {} |\n", separator_cells.join(" | ")));
+  let mut table_rows = Vec::with_capacity(rows.len() + 1);
+  table_rows.push(vec![String::new(); max_columns]);
 
   for row in rows {
     let sanitized: Vec<String> = row
       .into_iter()
       .map(|cell| sanitize_layout_cell_content(&cell))
       .collect();
-    markdown.push_str(&format!("| {} |\n", sanitized.join(" | ")));
+    table_rows.push(sanitized);
   }
 
-  markdown.push('\n');
-  markdown
+  render_markdown_table(table_rows).unwrap_or_else(|| convert_layout_section(layout, options))
 }
 
 /// Converts an element and its children to Markdown recursively.
@@ -598,7 +592,10 @@ mod tests {
     "#;
 
     let output = convert_to_markdown(input);
-    assert_eq!(output, "|   |   |\n| --- | --- |\n| Left column | Right column |\n");
+    assert_eq!(
+      output,
+      "|             |              |\n| ----------- | ------------ |\n| Left column | Right column |\n"
+    );
   }
 
   #[test]
@@ -617,7 +614,10 @@ mod tests {
     "#;
 
     let output = convert_to_markdown(input);
-    assert_eq!(output, "|   |   |\n| --- | --- |\n| One | Two |\n| Three | Four |\n");
+    assert_eq!(
+      output,
+      "|       |      |\n| ----- | ---- |\n| One   | Two  |\n| Three | Four |\n"
+    );
   }
 
   #[test]
@@ -639,7 +639,7 @@ line</p>
     let output = convert_to_markdown(input);
     assert_eq!(
       output,
-      "|   |   |\n| --- | --- |\n| Pipe \\| Value | Multi<br />line |\n"
+      "|               |                 |\n| ------------- | --------------- |\n| Pipe \\| Value | Multi<br />line |\n"
     );
   }
 }
