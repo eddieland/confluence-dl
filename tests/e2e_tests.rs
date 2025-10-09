@@ -78,8 +78,8 @@ async fn test_fetch_personal_space_page() {
   // Verify space information
   let space = page.space.unwrap();
   assert_eq!(space.space_type, "personal");
-  assert_eq!(space.key, "~6320c26429083bbe8cc369b0");
-  assert_eq!(space.name, "Edward Jones");
+  assert_eq!(space.key, "~example-user");
+  assert_eq!(space.name, "Example User");
 }
 
 #[tokio::test]

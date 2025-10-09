@@ -170,13 +170,13 @@ pub fn sample_personal_space_page_response() -> serde_json::Value {
       }
     },
     "space": {
-      "key": "~6320c26429083bbe8cc369b0",
-      "name": "Edward Jones",
+      "key": "~example-user",
+      "name": "Example User",
       "type": "personal"
     },
     "_links": {
-      "webui": "/wiki/spaces/~6320c26429083bbe8cc369b0/pages/229483/Getting+started+in+Confluence+from+Jira",
-      "self": "https://eddieland.atlassian.net/wiki/rest/api/content/229483"
+      "webui": "/wiki/spaces/~example-user/pages/229483/Getting+started+in+Confluence+from+Jira",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/229483"
     }
   })
 }
@@ -349,20 +349,20 @@ pub fn sample_meeting_notes_overview_response() -> serde_json::Value {
     "</ac:macro></p>",
     "<h2>Incomplete tasks from meetings</h2>",
     "<p><ac:macro ac:name=\"tasks-report-macro\">",
-    "<ac:parameter ac:name=\"spaces\">~6320c26429083bbe8cc369b0</ac:parameter>",
+    "<ac:parameter ac:name=\"spaces\">~example-user</ac:parameter>",
     "<ac:parameter ac:name=\"pageSize\">10</ac:parameter>",
     "<ac:parameter ac:name=\"status\">incomplete</ac:parameter>",
     "<ac:parameter ac:name=\"labels\">meeting-notes</ac:parameter>",
     "</ac:macro></p>",
     "<h2>Decisions from meetings</h2>",
     "<p><ac:macro ac:name=\"decisionreport\">",
-    "<ac:parameter ac:name=\"cql\">space = \"~6320c26429083bbe8cc369b0\" and label = \"meeting-notes\"</ac:parameter>",
+    "<ac:parameter ac:name=\"cql\">space = \"~example-user\" and label = \"meeting-notes\"</ac:parameter>",
     "</ac:macro></p>",
     "<h2>All meeting notes</h2>",
     "<p><ac:macro ac:name=\"content-report-table\">",
     "<ac:parameter ac:name=\"contentBlueprintId\">484f8c9d-447d-43cb-b290-33a51cb87d67</ac:parameter>",
     "<ac:parameter ac:name=\"analyticsKey\">meeting-notes</ac:parameter>",
-    "<ac:parameter ac:name=\"spaces\">~6320c26429083bbe8cc369b0</ac:parameter>",
+    "<ac:parameter ac:name=\"spaces\">~example-user</ac:parameter>",
     "<ac:parameter ac:name=\"createButtonLabel\">Create meeting note</ac:parameter>",
     "<ac:parameter ac:name=\"labels\">meeting-notes</ac:parameter>",
     "</ac:macro></p>"
@@ -384,13 +384,13 @@ pub fn sample_meeting_notes_overview_response() -> serde_json::Value {
       }
     },
     "space": {
-      "key": "~6320c26429083bbe8cc369b0",
-      "name": "Edward Jones",
+      "key": "~example-user",
+      "name": "Example User",
       "type": "personal"
     },
     "_links": {
-      "webui": "/wiki/spaces/~6320c26429083bbe8cc369b0/pages/998877/Meeting+notes+in+space",
-      "self": "https://eddieland.atlassian.net/wiki/rest/api/content/998877"
+      "webui": "/wiki/spaces/~example-user/pages/998877/Meeting+notes+in+space",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/998877"
     }
   })
 }
@@ -401,7 +401,7 @@ pub fn sample_meeting_notes_with_tasks_response() -> serde_json::Value {
     "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"1f5d3\" />&nbsp;Date</h2>",
     "<p><time datetime=\"2025-10-07\" /></p>",
     "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"1f465\" />&nbsp;Participants</h2>",
-    "<ul><li><p><ac:link><ri:user ri:account-id=\"6320c26429083bbe8cc369b0\" /></ac:link></p></li></ul>",
+    "<ul><li><p><ac:link><ri:user ri:account-id=\"example-account-id\" /></ac:link></p></li></ul>",
     "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"1f945\" />&nbsp;Goals</h2>",
     "<p><ac:placeholder>List goals for this meeting</ac:placeholder></p>",
     "<h2><ac:emoticon ac:name=\"blue-star\" ac:emoji-id=\"1f5e3\" />&nbsp;Discussion topics</h2>",
@@ -436,13 +436,13 @@ pub fn sample_meeting_notes_with_tasks_response() -> serde_json::Value {
       }
     },
     "space": {
-      "key": "~6320c26429083bbe8cc369b0",
-      "name": "Edward Jones",
+      "key": "~example-user",
+      "name": "Example User",
       "type": "personal"
     },
     "_links": {
-      "webui": "/wiki/spaces/~6320c26429083bbe8cc369b0/pages/887766/2025-10-07+Meeting+notes",
-      "self": "https://eddieland.atlassian.net/wiki/rest/api/content/887766"
+      "webui": "/wiki/spaces/~example-user/pages/887766/2025-10-07+Meeting+notes",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/887766"
     }
   })
 }
@@ -463,7 +463,7 @@ pub fn sample_comprehensive_features_response() -> serde_json::Value {
     "<h2>Internal Links</h2>",
     "<p>See <ac:link><ri:page ri:content-title=\"Getting Started Guide\" /></ac:link> for more information.</p>",
     "<h2>User Mentions</h2>",
-    "<p>Assigned to <ac:link><ri:user ri:account-id=\"6320c26429083bbe8cc369b0\" /></ac:link> for review.</p>",
+    "<p>Assigned to <ac:link><ri:user ri:account-id=\"example-account-id\" /></ac:link> for review.</p>",
     "<h2>Task Lists</h2>",
     "<ac:task-list>",
     "<ac:task><ac:task-id>1</ac:task-id><ac:task-status>complete</ac:task-status><ac:task-body>Complete this task</ac:task-body></ac:task>",

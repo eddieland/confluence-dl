@@ -77,12 +77,13 @@ mod tests {
 
   #[test]
   fn test_parse_confluence_url_with_space() {
-    let url = "https://eddieland.atlassian.net/wiki/spaces/~6320c26429083bbe8cc369b0/pages/229483/Getting+started+in+Confluence+from+Jira";
+    let url =
+      "https://example.atlassian.net/wiki/spaces/~example-user/pages/229483/Getting+started+in+Confluence+from+Jira";
     let info = parse_confluence_url(url).unwrap();
 
-    assert_eq!(info.base_url, "https://eddieland.atlassian.net");
+    assert_eq!(info.base_url, "https://example.atlassian.net");
     assert_eq!(info.page_id, "229483");
-    assert_eq!(info.space_key, Some("~6320c26429083bbe8cc369b0".to_string()));
+    assert_eq!(info.space_key, Some("~example-user".to_string()));
   }
 
   #[test]
