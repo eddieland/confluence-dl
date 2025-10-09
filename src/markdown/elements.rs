@@ -121,15 +121,35 @@ fn sanitize_layout_cell_content(content: &str) -> String {
     .join("<br />")
 }
 
+fn layout_cell_contains_block_markdown(content: &str) -> bool {
+  let trimmed = content.trim();
+
+  if trimmed.is_empty() {
+    return false;
+  }
+
+  if trimmed.contains("```") || trimmed.contains("\n\n") {
+    return true;
+  }
+
+  trimmed.lines().any(|line| {
+    let stripped = line.trim_start();
+    stripped.starts_with('>') || stripped.starts_with('#') || looks_like_list_marker(stripped)
+  })
+}
+
 fn convert_layout_to_markdown(layout: Node, options: &MarkdownOptions) -> String {
   let mut rows: Vec<Vec<String>> = Vec::new();
   let mut max_columns = 0;
+  let mut has_block_markdown = false;
 
   for section in layout.children().filter(|n| matches_tag(*n, "ac:layout-section")) {
     let mut cells = Vec::new();
 
     for cell in section.children().filter(|n| matches_tag(*n, "ac:layout-cell")) {
-      cells.push(convert_layout_cell(cell, options));
+      let cell_content = convert_layout_cell(cell, options);
+      has_block_markdown |= layout_cell_contains_block_markdown(&cell_content);
+      cells.push(cell_content);
     }
 
     if !cells.is_empty() {
@@ -139,6 +159,10 @@ fn convert_layout_to_markdown(layout: Node, options: &MarkdownOptions) -> String
   }
 
   if rows.is_empty() {
+    return convert_layout_section(layout, options);
+  }
+
+  if has_block_markdown {
     return convert_layout_section(layout, options);
   }
 
