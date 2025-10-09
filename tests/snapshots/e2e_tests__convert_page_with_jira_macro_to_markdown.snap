@@ -1,0 +1,12 @@
+---
+source: tests/e2e_tests.rs
+expression: markdown
+---
+# Jira Integration
+
+Tracked issue:
+
+[ABC-123](https://jira.example.com/browse/ABC-123): Investigate login regression
+Recent issues:
+
+> _Jira issues macro (JQL: project = ABC ORDER BY created DESC). Dynamic content not exported._

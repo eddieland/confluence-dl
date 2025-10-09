@@ -634,6 +634,48 @@ async fn test_convert_meeting_notes_with_tasks_to_markdown() {
 }
 
 #[tokio::test]
+async fn test_convert_page_with_jira_macro_to_markdown() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  client.add_page_from_json("112233", fixtures::sample_page_with_jira_macro_response());
+
+  let page = client.get_page("112233").await.unwrap();
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+
+  assert_snapshot!(markdown);
+}
+
+#[tokio::test]
+async fn test_convert_page_with_column_layout_to_markdown() {
+  use confluence_dl::markdown;
+
+  let mut client = FakeConfluenceClient::with_sample_pages();
+
+  client.add_page_from_json("223344", fixtures::sample_page_with_column_layout_response());
+
+  let page = client.get_page("223344").await.unwrap();
+  let storage_content = page
+    .body
+    .as_ref()
+    .and_then(|b| b.storage.as_ref())
+    .map(|s| s.value.as_str())
+    .unwrap();
+
+  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+
+  assert_snapshot!(markdown);
+}
+
+#[tokio::test]
 async fn test_convert_complex_page_with_code_to_markdown() {
   use confluence_dl::markdown;
 

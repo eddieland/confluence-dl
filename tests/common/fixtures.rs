@@ -254,6 +254,92 @@ pub fn sample_page_with_attachment_response() -> serde_json::Value {
   })
 }
 
+pub fn sample_page_with_jira_macro_response() -> serde_json::Value {
+  json!({
+    "id": "112233",
+    "type": "page",
+    "status": "current",
+    "title": "Jira Integration Overview",
+    "body": {
+      "storage": {
+        "value": r#"<h1>Jira Integration</h1>
+<p>Tracked issue:</p>
+<ac:structured-macro ac:name="jira">
+  <ac:parameter ac:name="key">ABC-123</ac:parameter>
+  <ac:parameter ac:name="baseurl">https://jira.example.com/</ac:parameter>
+  <ac:parameter ac:name="summary">Investigate login regression</ac:parameter>
+</ac:structured-macro>
+<p>Recent issues:</p>
+<ac:structured-macro ac:name="jira">
+  <ac:parameter ac:name="jql">project = ABC ORDER BY created DESC</ac:parameter>
+</ac:structured-macro>
+"#,
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<h1>Jira Integration</h1><p>Tracked issue:</p><p>Recent issues:</p>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "ENG",
+      "name": "Engineering",
+      "type": "global"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/ENG/pages/112233/Jira+Integration+Overview",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/112233"
+    }
+  })
+}
+
+pub fn sample_page_with_column_layout_response() -> serde_json::Value {
+  json!({
+    "id": "223344",
+    "type": "page",
+    "status": "current",
+    "title": "Team Responsibilities",
+    "body": {
+      "storage": {
+        "value": r#"<h1>Team Responsibilities</h1>
+<ac:layout>
+  <ac:layout-section>
+    <ac:layout-cell>
+      <p><strong>Frontend</strong>: Owns the web experience.</p>
+    </ac:layout-cell>
+    <ac:layout-cell>
+      <p><strong>Backend</strong>: Maintains APIs and services.</p>
+    </ac:layout-cell>
+  </ac:layout-section>
+  <ac:layout-section>
+    <ac:layout-cell>
+      <p><strong>DevOps</strong>: Ensures reliable deployments.</p>
+    </ac:layout-cell>
+    <ac:layout-cell>
+      <p><strong>QA</strong>: Guards product quality.</p>
+    </ac:layout-cell>
+  </ac:layout-section>
+</ac:layout>
+"#,
+        "representation": "storage"
+      },
+      "view": {
+        "value": "<h1>Team Responsibilities</h1>",
+        "representation": "view"
+      }
+    },
+    "space": {
+      "key": "OPS",
+      "name": "Operations",
+      "type": "global"
+    },
+    "_links": {
+      "webui": "/wiki/spaces/OPS/pages/223344/Team+Responsibilities",
+      "self": "https://example.atlassian.net/wiki/rest/api/content/223344"
+    }
+  })
+}
+
 // Sample response for child pages
 pub fn sample_child_page_1_response() -> serde_json::Value {
   json!({
