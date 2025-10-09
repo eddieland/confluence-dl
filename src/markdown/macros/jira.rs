@@ -39,12 +39,9 @@ fn render_single_issue(element: Node, key: &str) -> String {
   }
 
   let summary = parameter_value(element, "summary");
-  let server = parameter_value(element, "server")
-    .or_else(|| parameter_value(element, "baseurl"))
-    .or_else(|| parameter_value(element, "base-url"));
+  let base_url = resolve_issue_base_url(element);
 
-  let link = server
-    .and_then(normalize_text)
+  let link = base_url
     .map(|server_url| {
       let base = server_url.trim_end_matches('/');
       format!("{base}/browse/{trimmed_key}")
@@ -65,6 +62,18 @@ fn render_single_issue(element: Node, key: &str) -> String {
   }
 
   result
+}
+
+fn resolve_issue_base_url(element: Node) -> Option<String> {
+  ["baseurl", "base-url", "server"]
+    .into_iter()
+    .find_map(|name| parameter_value(element, name).and_then(|value| is_probable_url(&value).then_some(value)))
+}
+
+fn is_probable_url(value: &str) -> bool {
+  let candidate = value.trim();
+  !candidate.is_empty()
+    && (candidate.starts_with("http://") || candidate.starts_with("https://") || candidate.contains("://"))
 }
 
 /// Extracts and normalizes a parameter value.
@@ -114,6 +123,50 @@ mod tests {
       output,
       Some("[ABC-123](https://jira.example.com/browse/ABC-123): Fix the login flow".to_string())
     );
+  }
+
+  #[test]
+  fn test_render_single_issue_prefers_base_url_over_server_display_name() {
+    let input = r#"
+      <ac:structured-macro ac:name="jira">
+        <ac:parameter ac:name="key">ABC-123</ac:parameter>
+        <ac:parameter ac:name="server">Jira Cloud</ac:parameter>
+        <ac:parameter ac:name="baseurl">https://jira.example.com/</ac:parameter>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+
+    let output = handle_macro("jira", macro_node, &|_| String::new(), &MarkdownOptions::default());
+    assert_eq!(
+      output,
+      Some("[ABC-123](https://jira.example.com/browse/ABC-123)".to_string())
+    );
+  }
+
+  #[test]
+  fn test_render_single_issue_ignores_non_url_server() {
+    let input = r#"
+      <ac:structured-macro ac:name="jira">
+        <ac:parameter ac:name="key">ABC-123</ac:parameter>
+        <ac:parameter ac:name="server">Jira Cloud</ac:parameter>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+
+    let output = handle_macro("jira", macro_node, &|_| String::new(), &MarkdownOptions::default());
+    assert_eq!(output, Some("ABC-123".to_string()));
   }
 
   #[test]
