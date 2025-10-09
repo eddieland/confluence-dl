@@ -6,10 +6,17 @@ use roxmltree::Node;
 
 use super::utils::{get_element_text, matches_tag};
 
-/// Convert HTML table to markdown table.
+/// Convert an HTML table element into Markdown table syntax.
 ///
-/// Handles tables with thead, tbody, tfoot sections, or direct tr children.
-/// Automatically aligns columns and formats with proper spacing.
+/// Handles tables with `thead`, `tbody`, `tfoot` sections, or direct `tr`
+/// children. Automatically aligns columns and formats with consistent spacing.
+///
+/// # Arguments
+/// * `element` - The `<table>` node whose content should be rendered.
+///
+/// # Returns
+/// A Markdown fragment beginning with a newline that contains the formatted
+/// table, or an empty string when the table has no meaningful content.
 pub fn convert_table_to_markdown(element: Node) -> String {
   let mut rows: Vec<Vec<String>> = Vec::new();
 
@@ -102,6 +109,13 @@ pub fn convert_table_to_markdown(element: Node) -> String {
 }
 
 /// Format a single table row with proper column alignment.
+///
+/// # Arguments
+/// * `row` - The cell values to render, in column order.
+/// * `column_widths` - Precomputed column widths used to pad each cell.
+///
+/// # Returns
+/// A Markdown table row ending with a newline.
 fn format_row(row: &[String], column_widths: &[usize]) -> String {
   let mut line = String::new();
   line.push('|');

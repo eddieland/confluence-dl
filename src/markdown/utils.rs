@@ -115,6 +115,13 @@ pub fn wrap_with_namespaces(storage_content: &str) -> String {
 }
 
 /// Check if a string is a valid XML namespace prefix.
+///
+/// # Arguments
+/// * `prefix` - Candidate namespace prefix to validate.
+///
+/// # Returns
+/// `true` when the prefix only contains ASCII letters, digits, hyphen, or
+/// underscore.
 fn is_valid_prefix(prefix: &str) -> bool {
   if prefix.is_empty() {
     return false;
@@ -244,11 +251,17 @@ pub fn find_child_by_tag_and_attr<'a, 'input>(
     .find(|child| matches_tag(*child, tag_name) && get_attribute(*child, attr_name).as_deref() == Some(attr_value))
 }
 
-/// Clean up the markdown output.
+/// Clean up the markdown output for more predictable downstream processing.
 ///
 /// - Removes excessive blank lines (more than 2 consecutive)
 /// - Trims leading/trailing whitespace
-/// - Ensures file ends with a newline
+/// - Ensures the file ends with a newline
+///
+/// # Arguments
+/// * `content` - Raw Markdown emitted by the converter.
+///
+/// # Returns
+/// A normalized Markdown string that is safe to write to disk.
 pub fn clean_markdown(content: &str) -> String {
   let mut result = content.to_string();
 
