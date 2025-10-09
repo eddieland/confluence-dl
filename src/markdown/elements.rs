@@ -16,6 +16,17 @@ use super::macros::{
 use super::tables::convert_table_to_markdown;
 use super::utils::{get_attribute, get_element_text, matches_tag};
 
+/// Checks whether a line appears to start with a Markdown list marker.
+///
+/// This guards against accidentally duplicating list prefixes when nested
+/// content already includes list syntax.
+///
+/// # Arguments
+/// * `line` - Raw line text to examine for leading list indicators.
+///
+/// # Returns
+/// `true` when the line begins with a Markdown unordered or ordered list
+/// marker, otherwise `false`.
 fn looks_like_list_marker(line: &str) -> bool {
   let trimmed = line.trim_start();
 
@@ -42,6 +53,18 @@ fn looks_like_list_marker(line: &str) -> bool {
   false
 }
 
+/// Formats a converted list item, preserving nested list structure.
+///
+/// The helper ensures that existing list markers remain untouched while
+/// normalizing indentation for newly created prefixes.
+///
+/// # Arguments
+/// * `item` - Converted Markdown representing the list item's body.
+/// * `prefix` - The list marker (e.g., `"- "` or `"1. "`) applied to the first
+///   visible line.
+///
+/// # Returns
+/// Rendered Markdown snippet for the list item with normalized indentation.
 fn format_list_item(item: &str, prefix: &str) -> String {
   let mut formatted = String::new();
   let lines = item.trim_end().lines();
