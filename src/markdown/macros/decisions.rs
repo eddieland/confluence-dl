@@ -49,7 +49,7 @@ pub(super) fn handle_macro(
 pub fn convert_adf_extension_to_markdown(element: Node, convert_node: &dyn Fn(Node) -> String) -> String {
   let mut result = String::new();
   let mut decision_rendered = false;
-  let mut fallback_buffer = String::new();
+  let mut segments: Vec<(String, bool)> = Vec::new();
 
   for child in element.children().filter(|child| child.is_element()) {
     if matches_tag(child, "ac:adf-node") {
@@ -57,30 +57,56 @@ pub fn convert_adf_extension_to_markdown(element: Node, convert_node: &dyn Fn(No
         Some("decision-list") => {
           let rendered = convert_adf_decision_list(child);
           if !rendered.is_empty() {
-            if !fallback_buffer.is_empty() {
-              result.push_str(&fallback_buffer);
-              fallback_buffer.clear();
-            }
+            flush_adf_segments(&mut result, &mut segments, false);
             result.push_str(&rendered);
             decision_rendered = true;
           }
         }
-        Some(_) => fallback_buffer.push_str(&convert_node(child)),
-        None => {}
+        _ => append_adf_segment(&mut segments, convert_node(child), false),
       }
+    } else if matches_tag(child, "ac:adf-fallback") {
+      append_adf_segment(&mut segments, convert_node(child), true);
     } else {
-      fallback_buffer.push_str(&convert_node(child));
+      append_adf_segment(&mut segments, convert_node(child), false);
     }
   }
 
   if decision_rendered {
-    if !fallback_buffer.is_empty() {
-      result.push_str(&fallback_buffer);
-    }
+    flush_adf_segments(&mut result, &mut segments, false);
     result
   } else {
-    fallback_buffer
+    flush_adf_segments(&mut result, &mut segments, true);
+    result
   }
+}
+
+fn append_adf_segment(segments: &mut Vec<(String, bool)>, content: String, is_fallback: bool) {
+  if content.trim().is_empty() {
+    return;
+  }
+
+  if let Some((existing, existing_fallback)) = segments.last_mut()
+    && *existing_fallback == is_fallback
+  {
+    existing.push_str(&content);
+    return;
+  }
+
+  segments.push((content, is_fallback));
+}
+
+fn flush_adf_segments(result: &mut String, segments: &mut Vec<(String, bool)>, include_fallback: bool) {
+  if segments.is_empty() {
+    return;
+  }
+
+  for (content, is_fallback) in segments.iter() {
+    if include_fallback || !*is_fallback {
+      result.push_str(content);
+    }
+  }
+
+  segments.clear();
 }
 
 /// Aggregated decision metadata used for rendering Markdown output.

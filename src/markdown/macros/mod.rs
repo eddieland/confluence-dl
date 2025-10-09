@@ -453,7 +453,7 @@ line 2]]></ac:plain-text-body>
   }
 
   #[test]
-  fn test_convert_adf_extension_preserves_fallback_content() {
+  fn test_convert_adf_extension_ignores_fallback_when_decisions_rendered() {
     let input = concat!(
       "<ac:adf-extension>",
       "<ac:adf-node type=\"paragraph\"><ac:adf-content>Intro text.</ac:adf-content></ac:adf-node>",
@@ -473,10 +473,24 @@ line 2]]></ac:plain-text-body>
       .find(|node| matches_tag(*node, "ac:adf-extension"))
       .unwrap();
     let output = convert_adf_extension_to_markdown(extension, &simple_convert_node);
-    assert_eq!(
-      output,
-      "Intro text.\n- **Decision:** Decision Title\n\nOutro text.Fallback markup."
+    assert_eq!(output, "Intro text.\n- **Decision:** Decision Title\n\nOutro text.");
+  }
+
+  #[test]
+  fn test_convert_adf_extension_returns_fallback_when_no_supported_nodes() {
+    let input = concat!(
+      "<ac:adf-extension>",
+      "<ac:adf-fallback>Fallback only.</ac:adf-fallback>",
+      "</ac:adf-extension>"
     );
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let extension = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:adf-extension"))
+      .unwrap();
+    let output = convert_adf_extension_to_markdown(extension, &simple_convert_node);
+    assert_eq!(output, "Fallback only.");
   }
 
   #[test]
