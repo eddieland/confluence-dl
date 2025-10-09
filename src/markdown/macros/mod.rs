@@ -282,7 +282,10 @@ mod tests {
       .descendants()
       .find(|node| matches_tag(*node, "ac:structured-macro"))
       .unwrap();
-    let options = MarkdownOptions { preserve_anchors: true };
+    let options = MarkdownOptions {
+      preserve_anchors: true,
+      ..Default::default()
+    };
     let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &options);
     assert_eq!(output, "<a id=\"section-1\"></a>");
   }

@@ -16,10 +16,11 @@
 //! # Example
 //!
 //! ```no_run
-//! use confluence_dl::markdown::storage_to_markdown;
+//! use confluence_dl::markdown::{MarkdownOptions, storage_to_markdown_with_options};
 //!
 //! let confluence_html = r#"<h1>Title</h1><p><strong>Bold text</strong></p>"#;
-//! let markdown = storage_to_markdown(confluence_html).unwrap();
+//! let markdown =
+//!   storage_to_markdown_with_options(confluence_html, &MarkdownOptions::default()).unwrap();
 //! assert!(markdown.contains("# Title"));
 //! assert!(markdown.contains("**Bold text**"));
 //! ```
@@ -44,33 +45,8 @@ pub use elements::convert_node_to_markdown;
 pub struct MarkdownOptions {
   /// Preserve Confluence anchor macros as HTML anchors in the output.
   pub preserve_anchors: bool,
-}
-
-/// Convert Confluence storage format to Markdown with default options.
-///
-/// This implementation uses proper HTML parsing to handle Confluence's
-/// complex XML/HTML structure.
-///
-/// # Arguments
-///
-/// * `storage_content` - The Confluence storage format content (XHTML) to
-///   convert.
-///
-/// # Returns
-///
-/// `Result<String>` containing the converted Markdown content, or an error if
-/// parsing fails.
-///
-/// # Examples
-///
-/// ```
-/// # use confluence_dl::markdown::storage_to_markdown;
-/// let input = "<p>Hello <strong>world</strong>!</p>";
-/// let output = storage_to_markdown(input).unwrap();
-/// assert_eq!(output.trim(), "Hello **world**!");
-/// ```
-pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
-  storage_to_markdown_with_options(storage_content, &MarkdownOptions::default())
+  /// Render Markdown tables without padding cells to align columns.
+  pub compact_tables: bool,
 }
 
 /// Convert Confluence storage format to Markdown using the provided options.
@@ -86,6 +62,15 @@ pub fn storage_to_markdown(storage_content: &str) -> Result<String> {
 ///
 /// `Result<String>` containing the converted Markdown content, or an error if
 /// parsing fails.
+///
+/// # Examples
+///
+/// ```
+/// # use confluence_dl::markdown::{storage_to_markdown_with_options, MarkdownOptions};
+/// let input = "<p>Hello <strong>world</strong>!</p>";
+/// let output = storage_to_markdown_with_options(input, &MarkdownOptions::default()).unwrap();
+/// assert_eq!(output.trim(), "Hello **world**!");
+/// ```
 pub fn storage_to_markdown_with_options(storage_content: &str, options: &MarkdownOptions) -> Result<String> {
   // Pre-process: Replace HTML entities with numeric character references
   // roxmltree only supports XML's 5 predefined entities, not HTML entities
@@ -120,10 +105,14 @@ pub fn storage_to_markdown_with_options(storage_content: &str, options: &Markdow
 mod tests {
   use super::*;
 
+  fn render(input: &str) -> String {
+    storage_to_markdown_with_options(input, &MarkdownOptions::default()).unwrap()
+  }
+
   #[test]
   fn test_convert_headings() {
     let input = "<h1>Title</h1><h2>Subtitle</h2>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("# Title"));
     assert!(output.contains("## Subtitle"));
   }
@@ -131,7 +120,7 @@ mod tests {
   #[test]
   fn test_convert_formatting() {
     let input = "<p><strong>bold</strong> <em>italic</em> <s>strike</s></p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("**bold**"));
     assert!(output.contains("_italic_"));
     assert!(output.contains("~~strike~~"));
@@ -147,14 +136,14 @@ mod tests {
       </ac:structured-macro>
     "#;
 
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("> **Note:** This is a note block."));
   }
 
   #[test]
   fn test_convert_links() {
     let input = r#"<a href="https://example.com">Example</a>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("[Example](https://example.com)"));
   }
 
@@ -166,7 +155,7 @@ mod tests {
       </ac:structured-macro>
     "#;
 
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(!output.contains("<a id=\"my-anchor\"></a>"));
   }
 
@@ -178,7 +167,10 @@ mod tests {
       </ac:structured-macro>
     "#;
 
-    let options = MarkdownOptions { preserve_anchors: true };
+    let options = MarkdownOptions {
+      preserve_anchors: true,
+      ..Default::default()
+    };
     let output = storage_to_markdown_with_options(input, &options).unwrap();
     assert!(output.contains("<a id=\"my-anchor\"></a>"));
   }
@@ -197,7 +189,7 @@ mod tests {
         </ac:task>
       </ac:task-list>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     insta::assert_snapshot!(output, @r###"
     - [ ] Task 1
     - [x] Task 2
@@ -207,7 +199,7 @@ mod tests {
   #[test]
   fn test_convert_image() {
     let input = r#"<ac:image ac:alt="test image"><ri:url ri:value="https://example.com/image.png" /></ac:image>"#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("![test image](https://example.com/image.png)"));
   }
 
@@ -220,7 +212,7 @@ mod tests {
         <tr><td>Row 2 Col 1</td><td>Row 2 Col 2</td></tr>
       </table>
     "#;
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     insta::assert_snapshot!(output, @r###"
     | Header 1    | Header 2    |
     | ----------- | ----------- |
@@ -232,7 +224,7 @@ mod tests {
   #[test]
   fn test_convert_table_empty() {
     let input = "<table></table>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     // Empty table should produce minimal output
     assert!(!output.contains("|"));
   }
@@ -249,7 +241,7 @@ mod tests {
         <li>Second</li>
       </ol>
     "#;
-    let result = storage_to_markdown(input).unwrap();
+    let result = render(input);
     let output = result.escape_default();
     insta::assert_snapshot!(output, @r"- Item 1\n- Item 2\n\n      \n1. First\n2. Second\n");
   }
@@ -257,7 +249,7 @@ mod tests {
   #[test]
   fn test_convert_code_block() {
     let input = "<pre>function test() {\n  return 42;\n}</pre>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("```"));
     assert!(output.contains("function test()"));
   }
@@ -265,21 +257,21 @@ mod tests {
   #[test]
   fn test_convert_inline_code() {
     let input = "<p>Use <code>git commit</code> to save</p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("`git commit`"));
   }
 
   #[test]
   fn test_convert_horizontal_rule() {
     let input = "<p>Before</p><hr /><p>After</p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("---"));
   }
 
   #[test]
   fn test_convert_line_break() {
     let input = "<p>Line 1<br />Line 2</p>";
-    let output = storage_to_markdown(input).unwrap();
+    let output = render(input);
     assert!(output.contains("Line 1\nLine 2"));
   }
 }

@@ -8,7 +8,12 @@ mod common;
 use common::fake_confluence::FakeConfluenceClient;
 use common::fixtures;
 use confluence_dl::confluence::ConfluenceApi;
+use confluence_dl::markdown::{self, MarkdownOptions};
 use insta::assert_snapshot;
+
+fn render_markdown(storage_content: &str) -> String {
+  markdown::storage_to_markdown_with_options(storage_content, &MarkdownOptions::default()).unwrap()
+}
 
 #[tokio::test]
 async fn test_fetch_basic_page() {
@@ -310,8 +315,8 @@ async fn test_image_download_workflow() {
 
 #[tokio::test]
 async fn test_attachment_download_workflow() {
+  use confluence_dl::attachments;
   use confluence_dl::confluence::{Attachment, AttachmentLinks};
-  use confluence_dl::{attachments, markdown};
 
   let temp_dir = TempDir::new().unwrap();
   let output_path = temp_dir.path();
@@ -339,7 +344,7 @@ async fn test_attachment_download_workflow() {
     .map(|s| s.value.as_str())
     .unwrap();
 
-  let mut markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let mut markdown = render_markdown(storage_content);
 
   let downloaded = attachments::download_attachments(&client, "654321", output_path, false, None)
     .await
@@ -557,8 +562,6 @@ async fn test_page_tree_circular_reference_detection() {
 
 #[tokio::test]
 async fn test_convert_comprehensive_features_page_to_markdown() {
-  use confluence_dl::markdown;
-
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   // Add the comprehensive test page
@@ -576,15 +579,13 @@ async fn test_convert_comprehensive_features_page_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }
 
 #[tokio::test]
 async fn test_convert_meeting_notes_overview_to_markdown() {
-  use confluence_dl::markdown;
-
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   // Add the meeting notes overview page
@@ -602,15 +603,13 @@ async fn test_convert_meeting_notes_overview_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }
 
 #[tokio::test]
 async fn test_convert_meeting_notes_with_tasks_to_markdown() {
-  use confluence_dl::markdown;
-
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   // Add the meeting notes with tasks page
@@ -628,15 +627,13 @@ async fn test_convert_meeting_notes_with_tasks_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }
 
 #[tokio::test]
 async fn test_convert_page_with_jira_macro_to_markdown() {
-  use confluence_dl::markdown;
-
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   client.add_page_from_json("112233", fixtures::sample_page_with_jira_macro_response());
@@ -649,15 +646,13 @@ async fn test_convert_page_with_jira_macro_to_markdown() {
     .map(|s| s.value.as_str())
     .unwrap();
 
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }
 
 #[tokio::test]
 async fn test_convert_page_with_column_layout_to_markdown() {
-  use confluence_dl::markdown;
-
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   client.add_page_from_json("223344", fixtures::sample_page_with_column_layout_response());
@@ -670,15 +665,13 @@ async fn test_convert_page_with_column_layout_to_markdown() {
     .map(|s| s.value.as_str())
     .unwrap();
 
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }
 
 #[tokio::test]
 async fn test_convert_complex_page_with_code_to_markdown() {
-  use confluence_dl::markdown;
-
   let client = FakeConfluenceClient::with_sample_pages();
 
   // Fetch the complex page (already in sample_pages)
@@ -693,15 +686,13 @@ async fn test_convert_complex_page_with_code_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }
 
 #[tokio::test]
 async fn test_convert_page_with_internal_links_to_markdown() {
-  use confluence_dl::markdown;
-
   let client = FakeConfluenceClient::with_sample_pages();
 
   // Fetch the page with internal links
@@ -716,15 +707,13 @@ async fn test_convert_page_with_internal_links_to_markdown() {
     .unwrap();
 
   // Convert to markdown
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }
 
 #[tokio::test]
 async fn test_end_to_end_page_fetch_and_convert() {
-  use confluence_dl::markdown;
-
   let client = FakeConfluenceClient::with_sample_pages();
 
   // Test a complete workflow: fetch page -> extract content -> convert to
@@ -743,29 +732,25 @@ async fn test_end_to_end_page_fetch_and_convert() {
     .map(|s| s.value.as_str())
     .expect("Page should have storage content");
 
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }
 
 #[tokio::test]
 async fn test_markdown_conversion_handles_empty_content() {
-  use confluence_dl::markdown;
-
   // Test that empty/minimal content doesn't crash
   let empty_storage = "";
-  let result = markdown::storage_to_markdown(empty_storage);
+  let result = markdown::storage_to_markdown_with_options(empty_storage, &MarkdownOptions::default());
   assert!(result.is_ok(), "Should handle empty content");
 
   let minimal_storage = "<p>Test</p>";
-  let markdown = markdown::storage_to_markdown(minimal_storage).unwrap();
+  let markdown = render_markdown(minimal_storage);
   assert!(markdown.contains("Test"), "Should contain text");
 }
 
 #[tokio::test]
 async fn test_markdown_conversion_preserves_structure() {
-  use confluence_dl::markdown;
-
   let mut client = FakeConfluenceClient::with_sample_pages();
 
   // Add the comprehensive page
@@ -779,7 +764,7 @@ async fn test_markdown_conversion_preserves_structure() {
     .map(|s| s.value.as_str())
     .unwrap();
 
-  let markdown = markdown::storage_to_markdown(storage_content).unwrap();
+  let markdown = render_markdown(storage_content);
 
   assert_snapshot!(markdown);
 }

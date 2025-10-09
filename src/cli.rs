@@ -152,6 +152,10 @@ pub struct OutputOptions {
   /// Save raw Confluence storage format alongside Markdown
   #[arg(long)]
   pub save_raw: bool,
+
+  /// Render Markdown tables without padding columns for alignment
+  #[arg(long)]
+  pub compact_tables: bool,
 }
 
 /// Behavior options
@@ -340,6 +344,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -387,6 +392,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -434,6 +440,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -477,6 +484,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -520,6 +528,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -561,6 +570,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -619,6 +629,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -664,6 +675,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -706,6 +718,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -748,6 +761,7 @@ mod tests {
         output: "./output".to_string(),
         overwrite: false,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,

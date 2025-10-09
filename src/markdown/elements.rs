@@ -206,7 +206,7 @@ fn convert_layout_to_markdown(layout: Node, options: &MarkdownOptions) -> String
     table_rows.push(sanitized);
   }
 
-  render_markdown_table(table_rows).unwrap_or_else(|| convert_layout_section(layout, options))
+  render_markdown_table(table_rows, options.compact_tables).unwrap_or_else(|| convert_layout_section(layout, options))
 }
 
 /// Converts an element and its children to Markdown recursively.
@@ -301,7 +301,7 @@ pub fn convert_node_to_markdown(node: Node, options: &MarkdownOptions) -> String
           }
 
           // Tables
-          "table" => result.push_str(&convert_table_to_markdown(child)),
+          "table" => result.push_str(&convert_table_to_markdown(child, options)),
 
           // Confluence-specific elements
           "link" if matches_tag(child, "ac:link") => {

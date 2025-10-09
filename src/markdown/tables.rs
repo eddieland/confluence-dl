@@ -4,6 +4,7 @@
 
 use roxmltree::Node;
 
+use super::MarkdownOptions;
 use super::utils::{get_element_text, matches_tag};
 
 /// Convert an HTML table element into Markdown table syntax.
@@ -13,11 +14,12 @@ use super::utils::{get_element_text, matches_tag};
 ///
 /// # Arguments
 /// * `element` - The `<table>` node whose content should be rendered.
+/// * `options` - Markdown conversion flags controlling table rendering.
 ///
 /// # Returns
 /// A Markdown fragment beginning with a newline that contains the formatted
 /// table, or an empty string when the table has no meaningful content.
-pub fn convert_table_to_markdown(element: Node) -> String {
+pub fn convert_table_to_markdown(element: Node, options: &MarkdownOptions) -> String {
   let mut rows: Vec<Vec<String>> = Vec::new();
 
   // Collect all <tr> elements from the table
@@ -58,23 +60,25 @@ pub fn convert_table_to_markdown(element: Node) -> String {
     }
   }
 
-  render_markdown_table(rows).unwrap_or_default()
+  render_markdown_table(rows, options.compact_tables).unwrap_or_default()
 }
 
-/// Pretty-print Markdown tables with aligned columns.
+/// Pretty-print Markdown tables with optional column padding.
 ///
 /// Accepts a collection of rows (each a vector of cell strings) and formats
-/// them into a Markdown table with padded columns. The first row is treated as
-/// the header.
+/// them into a Markdown table. The first row is treated as the header. When
+/// `compact` is `false`, columns are padded to align neatly; otherwise padding
+/// is suppressed for a tighter layout.
 ///
 /// # Arguments
 /// * `rows` - Table rows in display order.
+/// * `compact` - Whether to avoid padding cells while rendering.
 ///
 /// # Returns
 /// `Some(String)` containing the rendered Markdown table (surrounded by leading
 /// and trailing newlines) or `None` when the supplied rows are insufficient to
 /// produce a valid table.
-pub fn render_markdown_table(mut rows: Vec<Vec<String>>) -> Option<String> {
+pub fn render_markdown_table(mut rows: Vec<Vec<String>>, compact: bool) -> Option<String> {
   if rows.is_empty() {
     return None;
   }
@@ -102,7 +106,7 @@ pub fn render_markdown_table(mut rows: Vec<Vec<String>>) -> Option<String> {
 
   // Render header row and separator
   if let Some(first_row) = rows.first() {
-    result.push_str(&format_row(first_row, &column_widths));
+    result.push_str(&format_row(first_row, &column_widths, compact));
 
     result.push('|');
     for width in &column_widths {
@@ -117,7 +121,7 @@ pub fn render_markdown_table(mut rows: Vec<Vec<String>>) -> Option<String> {
 
   // Render remaining rows
   for row in rows.iter().skip(1) {
-    result.push_str(&format_row(row, &column_widths));
+    result.push_str(&format_row(row, &column_widths, compact));
   }
 
   result.push('\n');
@@ -129,10 +133,11 @@ pub fn render_markdown_table(mut rows: Vec<Vec<String>>) -> Option<String> {
 /// # Arguments
 /// * `row` - The cell values to render, in column order.
 /// * `column_widths` - Precomputed column widths used to pad each cell.
+/// * `compact` - Whether columns should avoid trailing padding.
 ///
 /// # Returns
 /// A Markdown table row ending with a newline.
-fn format_row(row: &[String], column_widths: &[usize]) -> String {
+fn format_row(row: &[String], column_widths: &[usize], compact: bool) -> String {
   let mut line = String::new();
   line.push('|');
 
@@ -140,7 +145,7 @@ fn format_row(row: &[String], column_widths: &[usize]) -> String {
   for (cell, width) in row.iter().zip(column_widths) {
     line.push(' ');
     line.push_str(cell);
-    if *width > cell.len() {
+    if !compact && *width > cell.len() {
       line.push_str(&" ".repeat(width - cell.len()));
     }
     line.push(' ');
@@ -170,7 +175,8 @@ mod tests {
     let wrapped = wrap_with_namespaces(input);
     let document = Document::parse(&wrapped).unwrap();
     let table = document.descendants().find(|node| matches_tag(*node, "table")).unwrap();
-    let output = convert_table_to_markdown(table);
+    let options = MarkdownOptions::default();
+    let output = convert_table_to_markdown(table, &options);
     insta::assert_snapshot!(output, @r###"
     | Header 1    | Header 2    |
     | ----------- | ----------- |
@@ -180,12 +186,38 @@ mod tests {
   }
 
   #[test]
+  fn test_convert_table_compact() {
+    let input = r#"
+      <table>
+        <tr><th>Header 1</th><th>Header 2</th></tr>
+        <tr><td>Row 1 Col 1</td><td>Row 1 Col 2</td></tr>
+        <tr><td>Row 2 Col 1</td><td>Row 2 Col 2</td></tr>
+      </table>
+    "#;
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let table = document.descendants().find(|node| matches_tag(*node, "table")).unwrap();
+    let options = MarkdownOptions {
+      compact_tables: true,
+      ..Default::default()
+    };
+    let output = convert_table_to_markdown(table, &options);
+    insta::assert_snapshot!(output, @r"
+    | Header 1 | Header 2 |
+    | ----------- | ----------- |
+    | Row 1 Col 1 | Row 1 Col 2 |
+    | Row 2 Col 1 | Row 2 Col 2 |
+    ");
+  }
+
+  #[test]
   fn test_convert_table_empty() {
     let input = "<table></table>";
     let wrapped = wrap_with_namespaces(input);
     let document = Document::parse(&wrapped).unwrap();
     let table = document.descendants().find(|node| matches_tag(*node, "table")).unwrap();
-    let output = convert_table_to_markdown(table);
+    let options = MarkdownOptions::default();
+    let output = convert_table_to_markdown(table, &options);
     // Empty table should produce minimal output
     assert!(!output.contains("|"));
   }

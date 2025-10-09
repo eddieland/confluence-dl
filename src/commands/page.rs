@@ -154,12 +154,8 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
 
   // Convert to Markdown
   println!("\n{} {}", colors.info("→"), colors.info("Converting to Markdown"));
-  let mut markdown = if cli.images_links.preserve_anchors {
-    let options = MarkdownOptions { preserve_anchors: true };
-    markdown::storage_to_markdown_with_options(storage_content, &options)?
-  } else {
-    markdown::storage_to_markdown(storage_content)?
-  };
+  let options = build_markdown_options(cli);
+  let mut markdown = markdown::storage_to_markdown_with_options(storage_content, &options)?;
 
   if cli.behavior.verbose > 0 {
     println!(
@@ -340,13 +336,9 @@ fn download_page_tree<'a>(
     }
 
     // Convert to Markdown
-    let mut markdown = if cli.images_links.preserve_anchors {
-      let options = MarkdownOptions { preserve_anchors: true };
-      markdown::storage_to_markdown_with_options(storage_content, &options)
-    } else {
-      markdown::storage_to_markdown(storage_content)
-    }
-    .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
+    let options = build_markdown_options(cli);
+    let mut markdown = markdown::storage_to_markdown_with_options(storage_content, &options)
+      .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
 
     let mut downloaded_image_filenames = HashSet::new();
 
@@ -458,6 +450,13 @@ fn download_page_tree<'a>(
 
     Ok(())
   })
+}
+
+fn build_markdown_options(cli: &Cli) -> MarkdownOptions {
+  MarkdownOptions {
+    preserve_anchors: cli.images_links.preserve_anchors,
+    compact_tables: cli.output.compact_tables,
+  }
 }
 
 /// Count total pages in a page tree (including root and all descendants)
@@ -668,6 +667,7 @@ mod tests {
         output: output_path.to_string_lossy().to_string(),
         overwrite: true,
         save_raw: false,
+        compact_tables: false,
       },
       behavior: BehaviorOptions {
         dry_run: false,
