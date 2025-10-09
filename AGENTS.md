@@ -2,27 +2,27 @@
 
 ## Project Overview
 
-`confluence-dl` is a Rust CLI tool for exporting Confluence spaces and pages to Markdown. The project is in early development with core infrastructure in place but minimal implementation.
+`confluence-dl` is a Rust CLI tool for exporting Confluence pages (and their attachments/children) to Markdown. The binary is fully wired up: it parses a rich CLI, connects to Confluence, converts storage format to Markdown, downloads linked assets, and writes the output to disk.
 
 ## Architecture
 
 ### Project Structure
-```
-confluence-dl/
-├── src/
-│   └── main.rs          # Entry point (currently minimal)
-├── Cargo.toml           # Dependencies: clap, clap_complete
-├── build.rs             # Embeds git hash, timestamp, target arch
-├── Makefile             # Development workflow automation
-└── *.toml               # Rust tooling configuration
-```
+- `src/main.rs` starts the CLI, sets up tracing, and dispatches to subcommands.
+- `src/lib.rs` re-exports the reusable library modules.
+- Core modules live under `src/`:
+  - CLI parsing (`cli.rs`), color utilities (`color.rs`), Markdown conversion (`markdown/`).
+  - Confluence integration (`confluence/`): async HTTP client, API trait, models, and tree traversal helpers.
+  - Asset handling (`attachments.rs`, `images.rs`) and credential discovery (`credentials/`).
+  - Command handlers in `src/commands/` encapsulate `auth`, `completions`, `page`, and `version` workflows.
+- Project scaffolding (`Cargo.toml`, `build.rs`, `Makefile`, toolchain configs) sits at the repo root.
 
 ### Build System
 - [`build.rs`](build.rs:1) runs at compile time to embed metadata:
   - Git commit hash via `git rev-parse --short HEAD`
   - Build timestamp as Unix epoch seconds
   - Target architecture from `TARGET` env var
-- Access these at runtime via `env!("GIT_HASH")`, `env!("BUILD_TIMESTAMP")`, `env!("TARGET")`
+  - Rust compiler version via `rustc --version`
+- Access these at runtime via `env!("GIT_HASH")`, `env!("BUILD_TIMESTAMP")`, `env!("TARGET")`, `env!("RUSTC_VERSION")`
 
 ## Development Workflow
 
@@ -49,7 +49,7 @@ make release            # Build optimized binary
   - Update snapshots: `make update-snapshots` or `INSTA_UPDATE=1 cargo nextest run`
   - Review snapshots: `make insta-review` or `cargo insta review`
 - **E2E Testing**: Uses stub-based approach with [`FakeConfluenceClient`](tests/common/fake_confluence.rs:17)
-  - Trait-based design via [`ConfluenceApi`](src/confluence.rs:14) enables dependency injection
+  - Trait-based design via [`ConfluenceApi`](src/confluence/mod.rs:10) enables dependency injection
   - Pre-built fixtures in [`tests/common/fixtures.rs`](tests/common/fixtures.rs:1) provide realistic API responses
   - Fast, simple, and maintainable - no HTTP mocking required
 
@@ -126,9 +126,9 @@ Based on [README.md](README.md:1):
 
 ## Current State
 
-- **Implemented**: Build infrastructure, tooling configuration, project scaffolding
-- **Not Implemented**: Core functionality (Confluence API client, Markdown conversion, file I/O)
-- **Next Steps**: Implement CLI argument parsing, Confluence API client, page fetching
+- **Implemented**: End-to-end page export pipeline (CLI parsing, Confluence client, Markdown conversion, attachments/images download, credential discovery), colorized UX, snapshot-tested fixtures
+- **Not Implemented**: Top-level space export command, advanced Markdown customization, rich progress reporting
+- **Next Steps**: Space-wide export workflows, additional content transforms, polish around error reporting and telemetry
 
 ## Color and Visual Design
 
@@ -147,18 +147,18 @@ Use these methods instead of raw ANSI codes:
 
 | Method | Color | Use For | Example |
 |--------|-------|---------|---------|
-| [`success()`](src/color.rs:41) | Green | Successful operations, confirmations | "✓ Downloaded 5 pages" |
-| [`error()`](src/color.rs:50) | Bright Red (bold) | Error messages, failures | "✗ Failed to connect" |
-| [`warning()`](src/color.rs:59) | Yellow | Warnings, cautionary messages | "⚠ File already exists" |
-| [`info()`](src/color.rs:68) | Cyan | Informational messages | "Fetching page metadata..." |
-| [`debug()`](src/color.rs:77) | Bright Black (gray) | Debug/verbose output | "API response: 200 OK" |
-| [`emphasis()`](src/color.rs:86) | Bright White (bold) | Important text, headers | "Authentication:" |
-| [`link()`](src/color.rs:95) | Blue (underlined) | URLs, clickable items | "https://confluence.example.com" |
-| [`path()`](src/color.rs:104) | Magenta | File paths, directories | "./output/page.md" |
-| [`number()`](src/color.rs:113) | Bright Blue | Numbers, metrics, counts | "42 pages" |
-| [`code()`](src/color.rs:122) | Bright Green | Code snippets, commands | "`confluence-dl --help`" |
-| [`dimmed()`](src/color.rs:131) | Gray (dimmed) | Secondary/less important text | "(optional)" |
-| [`progress()`](src/color.rs:140) | Bright Cyan | Progress indicators, ongoing tasks | "Downloading..." |
+| [`success()`](src/color.rs:44) | Green | Successful operations, confirmations | "✓ Downloaded 5 pages" |
+| [`error()`](src/color.rs:53) | Bright Red (bold) | Error messages, failures | "✗ Failed to connect" |
+| [`warning()`](src/color.rs:62) | Yellow | Warnings, cautionary messages | "⚠ File already exists" |
+| [`info()`](src/color.rs:71) | Cyan | Informational messages | "Fetching page metadata..." |
+| [`debug()`](src/color.rs:80) | Bright Black (gray) | Debug/verbose output | "API response: 200 OK" |
+| [`emphasis()`](src/color.rs:90) | Bright White (bold) | Important text, headers | "Authentication:" |
+| [`link()`](src/color.rs:99) | Blue (underlined) | URLs, clickable items | "https://confluence.example.com" |
+| [`path()`](src/color.rs:107) | Magenta | File paths, directories | "./output/page.md" |
+| [`number()`](src/color.rs:116) | Bright Blue | Numbers, metrics, counts | "42 pages" |
+| [`code()`](src/color.rs:125) | Bright Green | Code snippets, commands | "`confluence-dl --help`" |
+| [`dimmed()`](src/color.rs:134) | Gray (dimmed) | Secondary/less important text | "(optional)" |
+| [`progress()`](src/color.rs:144) | Bright Cyan | Progress indicators, ongoing tasks | "Downloading..." |
 
 ### Best Practices for Color Usage
 
@@ -206,7 +206,7 @@ Use these methods instead of raw ANSI codes:
 
 ### Clap Color Styling
 
-The CLI help output uses custom colors defined in [`get_clap_styles()`](src/cli.rs:266):
+The CLI help output uses custom colors defined in [`get_clap_styles()`](src/cli.rs:306):
 - **Headers/Usage**: Bright Yellow + Bold
 - **Literals** (commands, flags): Bright Green
 - **Placeholders** (<args>): Bright Cyan
