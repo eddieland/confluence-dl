@@ -15,6 +15,7 @@ mod code;
 mod decisions;
 mod emoji_macros;
 mod expand;
+mod jira;
 
 pub use decisions::convert_adf_extension_to_markdown;
 
@@ -54,6 +55,10 @@ const HANDLERS: &[Handler] = &[
   Handler {
     names: &["decisionreport", "decision", "decision-list"],
     func: decisions::handle_macro,
+  },
+  Handler {
+    names: &["jira"],
+    func: jira::handle_macro,
   },
 ];
 
@@ -325,6 +330,52 @@ line 2]]></ac:plain-text-body>
 
     let expected = "\n```\nline 1\nline 2\n```\n\n";
     assert_eq!(output, expected);
+  }
+
+  #[test]
+  fn test_convert_jira_macro_single_issue() {
+    let input = r#"
+      <ac:structured-macro ac:name="jira">
+        <ac:parameter ac:name="key">ABC-123</ac:parameter>
+        <ac:parameter ac:name="server">https://jira.example.com</ac:parameter>
+        <ac:parameter ac:name="summary">Fix the login flow</ac:parameter>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
+
+    assert_eq!(
+      output,
+      "[ABC-123](https://jira.example.com/browse/ABC-123): Fix the login flow"
+    );
+  }
+
+  #[test]
+  fn test_convert_jira_macro_jql_message() {
+    let input = r#"
+      <ac:structured-macro ac:name="jira">
+        <ac:plain-text-body><![CDATA[project = ABC ORDER BY created DESC]]></ac:plain-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
+
+    assert_eq!(
+      output,
+      "\n> _Jira issues macro (JQL: project = ABC ORDER BY created DESC). Dynamic content not exported._\n\n"
+    );
   }
 
   #[test]
