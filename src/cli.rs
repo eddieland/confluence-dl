@@ -202,7 +202,13 @@ pub struct PageOptions {
 #[derive(Debug, Parser)]
 pub struct ImagesLinksOptions {
   /// Download embedded images
-  #[arg(long, default_value = "true", action = clap::ArgAction::Set)]
+  #[arg(
+    long,
+    default_value_t = true,
+    default_missing_value = "true",
+    action = clap::ArgAction::Set,
+    num_args = 0..=1
+  )]
   pub download_images: bool,
 
   /// Directory for images (relative to output)
