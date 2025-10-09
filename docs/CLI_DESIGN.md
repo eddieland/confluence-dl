@@ -241,7 +241,7 @@ These options are available for all commands:
                            [default: skip existing]
 ```
 
-*Note: The CLI currently exports Markdown only. Additional formats will be reconsidered once a concrete data model exists.*
+_Note: The CLI currently exports Markdown only. Additional formats will be reconsidered once a concrete data model exists._
 
 ### Behavior Options
 
@@ -421,29 +421,19 @@ fn parse_page_input(input: &str, base_url: Option<&str>) -> Result<PageTarget> {
 
 Potential features for later versions:
 
-### Space-Level Operations (v0.2+)
-
 1. **`space` subcommand**: Download entire spaces
+
    ```bash
    confluence-dl space MYSPACE -o ./backup
    ```
+
 2. **Space browsing**: List all pages in a space
 3. **Label filtering**: Filter by page labels
 4. **Archived page handling**: Options for archived content
-
-### Advanced Features (v0.3+)
-
-1. **Watch mode**: Continuous sync for a page tree
-2. **Diff mode**: Show what changed since last export
-3. **Search**: Search across downloaded content
-4. **Config file**: Support `.confluence-dl.toml` for persistent settings
-5. **Templates**: Custom markdown templates for different page types
-6. **Hooks**: Pre/post-processing scripts
-7. **Batch processing**: Read page URLs from stdin
-
-## Open Questions
-
-1. Should we support reading page URLs from stdin for batch processing in v0.1?
-2. Should `--dry-run` output a manifest file that can be used later?
-3. Do we want a `--config` flag to override default config file location?
-4. Should we have a `list` subcommand to browse page hierarchy without downloading?
+5. **Watch mode**: Continuous sync for a page tree
+6. **Diff mode**: Show what changed since last export
+7. **Search**: Search across downloaded content
+8. **Config file**: Support `.confluence-dl.toml` for persistent settings
+9. **Templates**: Custom markdown templates for different page types
+10. **Hooks**: Pre/post-processing scripts
+11. **Batch processing**: Read page URLs from stdin
