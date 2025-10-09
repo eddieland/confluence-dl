@@ -84,10 +84,12 @@ pub fn render_markdown_table(mut rows: Vec<Vec<String>>) -> Option<String> {
     return None;
   }
 
+  // Normalize row lengths
   for row in &mut rows {
     row.resize(column_count, String::new());
   }
 
+  // Compute maximum width for each column
   let mut column_widths = vec![0; column_count];
   for row in &rows {
     for (index, cell) in row.iter().enumerate() {
@@ -98,6 +100,7 @@ pub fn render_markdown_table(mut rows: Vec<Vec<String>>) -> Option<String> {
   let mut result = String::new();
   result.push('\n');
 
+  // Render header row and separator
   if let Some(first_row) = rows.first() {
     result.push_str(&format_row(first_row, &column_widths));
 
@@ -112,6 +115,7 @@ pub fn render_markdown_table(mut rows: Vec<Vec<String>>) -> Option<String> {
     result.push('\n');
   }
 
+  // Render remaining rows
   for row in rows.iter().skip(1) {
     result.push_str(&format_row(row, &column_widths));
   }
@@ -132,6 +136,7 @@ fn format_row(row: &[String], column_widths: &[usize]) -> String {
   let mut line = String::new();
   line.push('|');
 
+  // Render each cell with padding
   for (cell, width) in row.iter().zip(column_widths) {
     line.push(' ');
     line.push_str(cell);
