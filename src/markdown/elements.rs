@@ -109,6 +109,112 @@ fn format_list_item(item: &str, prefix: &str) -> String {
   formatted
 }
 
+fn convert_layout_cell(cell: Node, options: &MarkdownOptions) -> String {
+  let mut content = String::new();
+
+  for child in cell.children() {
+    content.push_str(&convert_node_to_markdown(child, options));
+  }
+
+  content
+}
+
+fn convert_layout_section(section: Node, options: &MarkdownOptions) -> String {
+  let mut content = String::new();
+
+  for child in section.children() {
+    content.push_str(&convert_node_to_markdown(child, options));
+  }
+
+  content
+}
+
+fn sanitize_layout_cell_content(content: &str) -> String {
+  let trimmed = content.trim();
+
+  if trimmed.is_empty() {
+    return String::new();
+  }
+
+  trimmed
+    .replace('|', "\\|")
+    .split('\n')
+    .map(str::trim_end)
+    .collect::<Vec<_>>()
+    .join("<br />")
+}
+
+fn layout_cell_contains_block_markdown(content: &str) -> bool {
+  let trimmed = content.trim();
+
+  if trimmed.is_empty() {
+    return false;
+  }
+
+  if trimmed.contains("```") || trimmed.contains("\n\n") {
+    return true;
+  }
+
+  trimmed.lines().any(|line| {
+    let stripped = line.trim_start();
+    stripped.starts_with('>') || stripped.starts_with('#') || looks_like_list_marker(stripped)
+  })
+}
+
+fn convert_layout_to_markdown(layout: Node, options: &MarkdownOptions) -> String {
+  let mut rows: Vec<Vec<String>> = Vec::new();
+  let mut max_columns = 0;
+  let mut has_block_markdown = false;
+
+  for section in layout.children().filter(|n| matches_tag(*n, "ac:layout-section")) {
+    let mut cells = Vec::new();
+
+    for cell in section.children().filter(|n| matches_tag(*n, "ac:layout-cell")) {
+      let cell_content = convert_layout_cell(cell, options);
+      has_block_markdown |= layout_cell_contains_block_markdown(&cell_content);
+      cells.push(cell_content);
+    }
+
+    if !cells.is_empty() {
+      max_columns = max_columns.max(cells.len());
+      rows.push(cells);
+    }
+  }
+
+  if rows.is_empty() {
+    return convert_layout_section(layout, options);
+  }
+
+  if has_block_markdown {
+    return convert_layout_section(layout, options);
+  }
+
+  for row in &mut rows {
+    if row.len() < max_columns {
+      row.resize_with(max_columns, String::new);
+    }
+  }
+
+  let header_cells: Vec<&str> = std::iter::repeat_n(" ", max_columns).collect();
+  let separator_cells: Vec<&str> = std::iter::repeat_n("---", max_columns).collect();
+
+  let mut markdown = String::new();
+  markdown.push('\n');
+  markdown.push_str(&format!("| {} |\n", header_cells.join(" | ")));
+  markdown.push_str(&format!("| {} |\n", separator_cells.join(" | ")));
+
+  for row in rows {
+    let sanitized: Vec<String> = row
+      .into_iter()
+      .map(|cell| sanitize_layout_cell_content(&cell))
+      .collect();
+    markdown.push_str(&format!("| {} |\n", sanitized.join(" | ")));
+  }
+
+  markdown.push('\n');
+  markdown
+}
+
 /// Converts an element and its children to Markdown recursively.
 ///
 /// # Arguments
@@ -226,15 +332,15 @@ pub fn convert_node_to_markdown(node: Node, options: &MarkdownOptions) -> String
             }));
           }
 
-          // Layout elements (just extract content)
+          // Layout elements
           "layout" if matches_tag(child, "ac:layout") => {
-            result.push_str(&convert_node_to_markdown(child, options));
+            result.push_str(&convert_layout_to_markdown(child, options));
           }
           "layout-section" if matches_tag(child, "ac:layout-section") => {
-            result.push_str(&convert_node_to_markdown(child, options));
+            result.push_str(&convert_layout_section(child, options));
           }
           "layout-cell" if matches_tag(child, "ac:layout-cell") => {
-            result.push_str(&convert_node_to_markdown(child, options));
+            result.push_str(&convert_layout_cell(child, options));
           }
           "rich-text-body" if matches_tag(child, "ac:rich-text-body") => {
             result.push_str(&convert_node_to_markdown(child, options));
@@ -474,5 +580,66 @@ mod tests {
 
     let output = convert_to_markdown(input);
     assert!(output.contains("- **Decision:** Hotel? Trivago"));
+  }
+
+  #[test]
+  fn test_convert_layout_to_markdown_single_row() {
+    let input = r#"
+      <ac:layout>
+        <ac:layout-section>
+          <ac:layout-cell>
+            <p>Left column</p>
+          </ac:layout-cell>
+          <ac:layout-cell>
+            <p>Right column</p>
+          </ac:layout-cell>
+        </ac:layout-section>
+      </ac:layout>
+    "#;
+
+    let output = convert_to_markdown(input);
+    assert_eq!(output, "|   |   |\n| --- | --- |\n| Left column | Right column |\n");
+  }
+
+  #[test]
+  fn test_convert_layout_to_markdown_multiple_rows() {
+    let input = r#"
+      <ac:layout>
+        <ac:layout-section>
+          <ac:layout-cell><p>One</p></ac:layout-cell>
+          <ac:layout-cell><p>Two</p></ac:layout-cell>
+        </ac:layout-section>
+        <ac:layout-section>
+          <ac:layout-cell><p>Three</p></ac:layout-cell>
+          <ac:layout-cell><p>Four</p></ac:layout-cell>
+        </ac:layout-section>
+      </ac:layout>
+    "#;
+
+    let output = convert_to_markdown(input);
+    assert_eq!(output, "|   |   |\n| --- | --- |\n| One | Two |\n| Three | Four |\n");
+  }
+
+  #[test]
+  fn test_convert_layout_escapes_table_characters() {
+    let input = r#"
+      <ac:layout>
+        <ac:layout-section>
+          <ac:layout-cell>
+            <p>Pipe | Value</p>
+          </ac:layout-cell>
+          <ac:layout-cell>
+            <p>Multi
+line</p>
+          </ac:layout-cell>
+        </ac:layout-section>
+      </ac:layout>
+    "#;
+
+    let output = convert_to_markdown(input);
+    assert_eq!(
+      output,
+      "|   |   |\n| --- | --- |\n| Pipe \\| Value | Multi<br />line |\n"
+    );
   }
 }
