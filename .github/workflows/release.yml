@@ -9,6 +9,8 @@ permissions:
   contents: write # For creating releases
   actions: read # For artifact downloads
   packages: write # For publishing container images
+  id-token: write # For build provenance attestations
+  attestations: write # For build provenance attestations
 
 jobs:
   validate-version:
@@ -151,6 +153,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v5
 
@@ -218,6 +222,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
+        id: build-image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -227,3 +232,10 @@ jobs:
           build-args: |
             BINARY_PATH=dist/confluence-dl
             CHECKSUM_PATH=dist/confluence-dl.sha256
+            
+      - name: Generate build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY_IMAGE }}
+          subject-digest: ${{ steps.build-image.outputs.digest }}
+          push-to-registry: true
