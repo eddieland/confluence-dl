@@ -1,0 +1,42 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Group all patch updates together
+      patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+
+      # Group minor updates for common ecosystems
+      tokio-updates:
+        patterns:
+          - "tokio*"
+        update-types:
+          - "minor"
+
+      serde-updates:
+        patterns:
+          - "serde*"
+        update-types:
+          - "minor"
+
+    # Allow Dependabot to update both direct and indirect deps
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+
+    # Ignore major updates for stability in public releases
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+        
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
