@@ -129,7 +129,7 @@ jobs:
           envsubst <.github/release-template.md >release_notes.md
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ./confluence-dl-linux-x86_64-*.tar.gz
