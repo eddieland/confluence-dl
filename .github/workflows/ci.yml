@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [format, clippy]
+        check: [format, clippy, autofixers]
     steps:
       - uses: actions/checkout@v5
       - name: Install Rust
@@ -60,6 +60,29 @@ jobs:
             echo "## Fast Checks (clippy)"
             echo
             echo "- ✅ \`cargo clippy --workspace -- -D warnings\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run autofixers
+        if: matrix.check == 'autofixers'
+        run: make fmt
+
+      - name: Ensure autofixers produced no changes
+        if: matrix.check == 'autofixers'
+        run: |
+          if ! git diff --quiet --exit-code; then
+            echo "Running \`make fmt\` generated changes."
+            git status --short
+            git diff
+            exit 1
+          fi
+
+      - name: Add autofix summary
+        if: matrix.check == 'autofixers'
+        run: |
+          {
+            echo "## Fast Checks (autofixers)"
+            echo
+            echo "- ✅ \`make fmt\` produced no changes"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Tests can run in parallel with the fast-checks
