@@ -1,7 +1,7 @@
 # confluence-dl
 
 [![CI](https://github.com/eddieland/confluence-dl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/eddieland/confluence-dl/actions/workflows/ci.yml)
-[![Release](https://github.com/eddieland/confluence-dl/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/eddieland/confluence-dl/actions/workflows/release.yml)
+[![Release](https://github.com/eddieland/confluence-dl/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/eddieland/confluence-dl/actions/workflows/release.yml)
 
 A fast, intuitive CLI tool for exporting Confluence pages to Markdown.
 
