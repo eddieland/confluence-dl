@@ -53,6 +53,15 @@ jobs:
         if: matrix.check == 'clippy'
         run: cargo clippy --workspace -- -D warnings
 
+      - name: Add lint summary
+        if: matrix.check == 'clippy'
+        run: |
+          {
+            echo "## Fast Checks (clippy)"
+            echo
+            echo "- ✅ \`cargo clippy --workspace -- -D warnings\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Tests can run in parallel with the fast-checks
   test:
     name: Test
@@ -81,3 +90,11 @@ jobs:
         with:
           name: confluence-dl-${{ matrix.os }}
           path: target/debug/confluence-dl
+      - name: Add test summary
+        if: success()
+        run: |
+          {
+            echo "## Tests (${{ matrix.os }})"
+            echo
+            echo "- ✅ \`cargo nextest run --workspace\`"
+          } >> "$GITHUB_STEP_SUMMARY"
