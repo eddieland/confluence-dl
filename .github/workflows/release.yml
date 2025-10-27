@@ -234,7 +234,7 @@ jobs:
             CHECKSUM_PATH=dist/confluence-dl.sha256
             
       - name: Generate build provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ${{ env.REGISTRY_IMAGE }}
           subject-digest: ${{ steps.build-image.outputs.digest }}
