@@ -53,7 +53,7 @@ jobs:
           tar -czf confluence-dl-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release confluence-dl
           shasum -a 256 confluence-dl-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz > confluence-dl-linux-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: confluence-dl-linux
           path: |
@@ -85,7 +85,7 @@ jobs:
           tar -czf confluence-dl-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz -C target/release confluence-dl
           shasum -a 256 confluence-dl-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz > confluence-dl-macos-x86_64-v${{ steps.version.outputs.version }}.tar.gz.sha256
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: confluence-dl-macos
           path: |
