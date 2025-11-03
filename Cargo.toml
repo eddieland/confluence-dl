@@ -11,8 +11,8 @@ anyhow = "1"
 async-trait = "0.1"
 base64 = "0.22"
 chrono = "0.4"
-clap = { version = "4.5.50", features = ["derive", "env", "color"] }
-clap_complete = "4.5.59"
+clap = { version = "4.5.51", features = ["derive", "env", "color"] }
+clap_complete = "4.5.60"
 futures = "0.3"
 owo-colors = { version = "4.1", features = ["supports-colors"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
