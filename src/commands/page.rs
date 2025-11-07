@@ -1,3 +1,9 @@
+//! Page download workflow.
+//!
+//! Implements the default command that fetches one or more Confluence pages,
+//! converts them to Markdown, downloads assets, and persists everything to
+//! disk according to the current CLI settings.
+
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
@@ -16,7 +22,16 @@ use crate::confluence::{self, ConfluenceApi};
 use crate::markdown::{self, MarkdownOptions};
 use crate::{attachments, images};
 
-/// Handle page download
+/// Execute the primary page download workflow.
+///
+/// The handler parses the supplied page identifier, resolves credentials, and
+/// orchestrates downloads of pages, attachments, and images based on the
+/// user's CLI flags.
+///
+/// # Arguments
+/// * `page_input` - User-provided page URL or numeric Confluence page ID.
+/// * `cli` - Parsed CLI options controlling behavior, output, and auth.
+/// * `colors` - Shared color scheme for consistent terminal output.
 pub(crate) async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
   println!("{} {}", colors.progress("→"), colors.info("Downloading page"));
   println!("  {}: {}", colors.emphasis("URL"), colors.link(page_input));
@@ -52,7 +67,21 @@ pub(crate) async fn handle_page_download(page_input: &str, cli: &Cli, colors: &C
   println!("\n{} {}", colors.success("✓"), colors.success("Download complete"));
 }
 
-/// Download a page and save it to disk
+/// Download a single Confluence page (optionally with attachments/children).
+///
+/// This helper performs the end-to-end export for one root page: authenticating
+/// against Confluence, retrieving content, converting it to Markdown, and
+/// writing files to disk. When `--children` is enabled it delegates to
+/// [`download_page_tree`] after building the page tree.
+///
+/// # Arguments
+/// * `page_input` - Page URL or numeric ID.
+/// * `cli` - Parsed CLI options.
+/// * `colors` - Color palette for progress output.
+///
+/// # Errors
+/// Returns an error when any network call, filesystem write, or conversion
+/// step fails.
 async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> anyhow::Result<()> {
   // Parse URL to extract page ID and base URL
   let url_info = if page_input.contains("://") {
@@ -276,7 +305,27 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
   Ok(())
 }
 
-/// Download a page tree recursively
+/// Recursively download and render every node in a [`confluence::PageTree`].
+///
+/// The traversal enforces the configured parallelism with a semaphore so that
+/// API calls and filesystem writes stay within resource constraints. Each page
+/// is converted to Markdown, attachments/images are optionally downloaded, and
+/// children are written to nested directories mirroring the tree shape.
+///
+/// # Arguments
+/// * `client` - Confluence API implementation to fetch content from.
+/// * `tree` - Current tree node describing the page and its descendants.
+/// * `output_dir` - Root directory under which files for this node are stored.
+/// * `cli` - Parsed CLI settings controlling behavior.
+/// * `colors` - Color palette for log output.
+/// * `semaphore` - Shared limiter controlling concurrent downloads.
+///
+/// # Returns
+/// A future resolving once the tree rooted at `tree` is fully written.
+///
+/// # Errors
+/// Returns an error when API calls fail, when data is missing required fields,
+/// or when filesystem interactions cannot be completed.
 fn download_page_tree<'a>(
   client: &'a dyn ConfluenceApi,
   tree: &'a confluence::PageTree,
@@ -452,6 +501,9 @@ fn download_page_tree<'a>(
   })
 }
 
+/// Build the Markdown conversion options from the CLI settings.
+///
+/// Currently propagates anchor preservation and compact table rendering flags.
 fn build_markdown_options(cli: &Cli) -> MarkdownOptions {
   MarkdownOptions {
     preserve_anchors: cli.images_links.preserve_anchors,
@@ -459,12 +511,15 @@ fn build_markdown_options(cli: &Cli) -> MarkdownOptions {
   }
 }
 
-/// Count total pages in a page tree (including root and all descendants)
+/// Count the number of pages represented inside a [`confluence::PageTree`].
 fn count_pages_in_tree(tree: &confluence::PageTree) -> usize {
   1 + tree.children.iter().map(count_pages_in_tree).sum::<usize>()
 }
 
-/// Sanitize a page title to create a valid filename
+/// Sanitize a Confluence page title so it can be used as a filesystem name.
+///
+/// Removes/normalizes characters that are potentially unsafe across
+/// platforms, collapsing repeated whitespace while keeping readability.
 fn sanitize_filename(title: &str) -> String {
   title
     .chars()
