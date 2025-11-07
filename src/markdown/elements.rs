@@ -11,7 +11,7 @@ use super::emoji::{convert_emoji_to_markdown, convert_span_emoji};
 use super::html_entities::decode_html_entities;
 use super::macros::{
   convert_adf_extension_to_markdown, convert_confluence_link_to_markdown, convert_image_to_markdown,
-  convert_macro_to_markdown, convert_task_list_to_markdown,
+  convert_macro_to_markdown, convert_task_list_to_markdown, render_admonition_block,
 };
 use super::tables::{convert_table_to_markdown, render_markdown_table};
 use super::utils::{get_attribute, get_element_text, matches_tag};
@@ -117,6 +117,16 @@ fn convert_layout_cell(cell: Node, options: &MarkdownOptions) -> String {
   }
 
   content
+}
+
+fn convert_legacy_admonition_block(node: Node, options: &MarkdownOptions, heading: &str) -> String {
+  let body = node
+    .children()
+    .find(|child| matches_tag(*child, "ac:rich-text-body"))
+    .map(|body| convert_node_to_markdown(body, options))
+    .unwrap_or_else(|| get_element_text(node));
+
+  render_admonition_block(heading, body.trim())
 }
 
 fn convert_layout_section(section: Node, options: &MarkdownOptions) -> String {
@@ -306,6 +316,18 @@ pub fn convert_node_to_markdown(node: Node, options: &MarkdownOptions) -> String
           // Confluence-specific elements
           "link" if matches_tag(child, "ac:link") => {
             result.push_str(&convert_confluence_link_to_markdown(child));
+          }
+          "note" if matches_tag(child, "ac:note") => {
+            result.push_str(&convert_legacy_admonition_block(child, options, "Note"));
+          }
+          "info" if matches_tag(child, "ac:info") => {
+            result.push_str(&convert_legacy_admonition_block(child, options, "Info"));
+          }
+          "tip" if matches_tag(child, "ac:tip") => {
+            result.push_str(&convert_legacy_admonition_block(child, options, "Tip"));
+          }
+          "warning" if matches_tag(child, "ac:warning") => {
+            result.push_str(&convert_legacy_admonition_block(child, options, "Warning"));
           }
           "structured-macro" if matches_tag(child, "ac:structured-macro") => {
             result.push_str(&convert_macro_to_markdown(

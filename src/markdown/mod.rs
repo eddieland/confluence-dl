@@ -141,6 +141,50 @@ mod tests {
   }
 
   #[test]
+  fn test_convert_excerpt_macro() {
+    let input = r#"
+      <ac:structured-macro ac:name="excerpt">
+        <ac:rich-text-body>
+          <p>This is an excerpt.</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let output = render(input);
+    assert!(output.contains("> **Excerpt:** This is an excerpt."));
+  }
+
+  #[test]
+  fn test_convert_excerpt_macro_without_panel() {
+    let input = r#"
+      <ac:structured-macro ac:name="excerpt">
+        <ac:parameter ac:name="nopanel">true</ac:parameter>
+        <ac:rich-text-body>
+          <p>This is inline.</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let output = render(input);
+    assert!(output.contains("This is inline."));
+    assert!(!output.contains("**Excerpt:**"));
+  }
+
+  #[test]
+  fn test_convert_legacy_note_block() {
+    let input = r#"
+      <ac:note>
+        <ac:rich-text-body>
+          <p>This is a legacy note.</p>
+        </ac:rich-text-body>
+      </ac:note>
+    "#;
+
+    let output = render(input);
+    assert!(output.contains("> **Note:** This is a legacy note."));
+  }
+
+  #[test]
   fn test_convert_links() {
     let input = r#"<a href="https://example.com">Example</a>"#;
     let output = render(input);
