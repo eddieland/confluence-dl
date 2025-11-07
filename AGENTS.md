@@ -254,7 +254,9 @@ When adding new output:
 1. **Always use `cargo nextest run`**, never `cargo test` - see Testing Strategy section
 2. **Run `make fmt` after ANY Rust code changes** - This applies rustfmt and clippy auto-fixes to ensure code consistency with project standards. Never skip this step, even for small changes.
 3. **Run `make all`** (fmt + lint + test) before suggesting changes are complete
-4. **Write descriptive Rustdocs** - explain the "why", and when the behavior isn't trivial include `# Arguments` and `# Returns` sections so docs stay consistent
+4. **Write descriptive Rustdocs** - document every non-trivial function, method, or public type with meaningful Rustdoc comments. Focus on the "why" as well as the "what", and include sections like `# Arguments`, `# Returns`, and `# Errors` when they clarify usage.
+   - Prefer complete sentences, start summaries with verbs, and show minimal runnable snippets when examples help understanding.
+   - Document panics with a `# Panics` section, and prefer describing invariants or side effects inline when relevant.
 5. **Add tests alongside new features** - use `#[cfg(test)]` modules
 6. **When adding features**, update the appropriate section of this file
 
