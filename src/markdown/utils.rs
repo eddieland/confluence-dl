@@ -7,6 +7,8 @@ use std::collections::BTreeSet;
 
 use roxmltree::Node;
 
+use super::emoji::{convert_emoji_to_markdown, convert_span_emoji};
+
 /// Synthetic namespace base URL for Confluence namespaces.
 pub const SYNTHETIC_NS_BASE: &str = "https://confluence.example/";
 
@@ -21,6 +23,18 @@ pub const SYNTHETIC_NS_BASE: &str = "https://confluence.example/";
 /// # Returns
 /// A `String` containing all text nodes with HTML entities decoded.
 pub fn get_element_text(node: Node) -> String {
+  collect_element_text(node, true)
+}
+
+/// Collects decoded text content without interpreting inline emoji metadata.
+///
+/// This variant is used when the caller needs the literal text children,
+/// avoiding the recursive emoji detection performed by [`get_element_text`].
+pub(crate) fn get_plain_text(node: Node) -> String {
+  collect_element_text(node, false)
+}
+
+fn collect_element_text(node: Node, detect_inline_emoji: bool) -> String {
   let mut text = String::new();
 
   for child in node.children() {
@@ -31,7 +45,21 @@ pub fn get_element_text(node: Node) -> String {
         }
       }
       roxmltree::NodeType::Element => {
-        text.push_str(&get_element_text(child));
+        if detect_inline_emoji {
+          if matches_tag(child, "ac:emoji") || matches_tag(child, "ac:emoticon") {
+            text.push_str(&convert_emoji_to_markdown(child));
+            continue;
+          }
+
+          if child.tag_name().name() == "span"
+            && let Some(emoji) = convert_span_emoji(child)
+          {
+            text.push_str(&emoji);
+            continue;
+          }
+        }
+
+        text.push_str(&collect_element_text(child, detect_inline_emoji));
       }
       _ => {}
     }
@@ -316,6 +344,26 @@ mod tests {
     let div = document.descendants().find(|node| matches_tag(*node, "div")).unwrap();
     let text = get_element_text(div);
     assert_eq!(text, "Nested text content");
+  }
+
+  #[test]
+  fn test_get_element_text_emits_ac_emoji_nodes() {
+    let input = "<p>Wave <ac:emoji ac:emoji-id=\"1f44b\" />!</p>";
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let p = document.descendants().find(|node| matches_tag(*node, "p")).unwrap();
+    let text = get_element_text(p);
+    assert_eq!(text, "Wave 👋!");
+  }
+
+  #[test]
+  fn test_get_element_text_emits_span_emoji_metadata() {
+    let input = "<p>Icons <span data-emoji-id=\"1f680\"></span> <span data-emoji-fallback=\"✨\"></span></p>";
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let p = document.descendants().find(|node| matches_tag(*node, "p")).unwrap();
+    let text = get_element_text(p);
+    assert_eq!(text, "Icons 🚀 ✨");
   }
 
   #[test]
