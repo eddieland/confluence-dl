@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::process;
 
 use crate::cli::{AuthCommand, Cli};
@@ -23,6 +25,8 @@ pub(crate) async fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, col
 
       println!("{} {}", colors.info("→"), colors.info("Testing authentication"));
       println!("  {}: {}", colors.emphasis("URL"), colors.link(base_url));
+
+      warn_if_insecure_netrc(colors);
 
       // Load credentials
       let (username, token) = match load_credentials(base_url, cli) {
@@ -286,3 +290,35 @@ fn extract_host(url: &str) -> Option<String> {
     Some(url.to_string())
   }
 }
+
+#[cfg(unix)]
+fn warn_if_insecure_netrc(colors: &ColorScheme) {
+  if let Ok(home) = std::env::var("HOME") {
+    let netrc_path = std::path::Path::new(&home).join(".netrc");
+    if let Ok(metadata) = std::fs::metadata(&netrc_path) {
+      let mode = metadata.permissions().mode() & 0o777;
+      if mode & 0o077 != 0 {
+        println!(
+          "\n{} {}",
+          colors.warning("⚠"),
+          colors.warning(".netrc permissions are too permissive")
+        );
+        println!("  {}: {}", colors.emphasis("File"), colors.path(netrc_path.display()));
+        println!(
+          "  {}: {}",
+          colors.emphasis("Current mode"),
+          colors.number(format!("{mode:03o}"))
+        );
+        println!(
+          "  {} {} {}",
+          colors.dimmed("Hint:"),
+          colors.dimmed("restrict access using"),
+          colors.code("chmod 600 ~/.netrc")
+        );
+      }
+    }
+  }
+}
+
+#[cfg(not(unix))]
+fn warn_if_insecure_netrc(_: &ColorScheme) {}
