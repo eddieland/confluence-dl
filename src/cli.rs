@@ -53,6 +53,17 @@ pub struct Cli {
 /// Subcommands for debugging and introspection
 #[derive(Debug, Subcommand)]
 pub enum Command {
+  /// Print the Confluence page tree without downloading content
+  Ls {
+    /// Page URL or numeric page ID whose descendants should be displayed
+    #[arg(value_name = "PAGE_URL_OR_ID")]
+    target: String,
+
+    /// Maximum depth when traversing children (0 lists only the root page)
+    #[arg(long, value_name = "N")]
+    max_depth: Option<usize>,
+  },
+
   /// Authentication testing and inspection
   Auth {
     #[command(subcommand)]
