@@ -32,7 +32,7 @@ use crate::{attachments, images};
 /// * `page_input` - User-provided page URL or numeric Confluence page ID.
 /// * `cli` - Parsed CLI options controlling behavior, output, and auth.
 /// * `colors` - Shared color scheme for consistent terminal output.
-pub(crate) async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
+pub async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorScheme) {
   println!("{} {}", colors.progress("→"), colors.info("Downloading page"));
   println!("  {}: {}", colors.emphasis("URL"), colors.link(page_input));
   println!("  {}: {}", colors.emphasis("Output"), colors.path(&cli.output.output));

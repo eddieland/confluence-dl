@@ -12,7 +12,7 @@ use crate::color::ColorScheme;
 /// * `json` - When `true`, emit a JSON document instead of colored text.
 /// * `short` - When `true`, print only the semantic version string.
 /// * `colors` - Shared color palette for styled terminal output.
-pub(crate) fn handle_version_command(json: bool, short: bool, colors: &ColorScheme) {
+pub fn handle_version_command(json: bool, short: bool, colors: &ColorScheme) {
   let version = env!("CARGO_PKG_VERSION");
 
   if short {

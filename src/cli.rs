@@ -3,8 +3,19 @@
 //! This module defines the CLI structure using clap derives, organizing
 //! commands and arguments according to the design in CLI_DESIGN.md.
 
+use std::process;
+
 use clap::{Parser, Subcommand, ValueEnum};
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::LevelFilter;
 use url::Url;
+
+use crate::color::ColorScheme;
+use crate::commands::auth::{AuthCommand, handle_auth_command};
+use crate::commands::completions::{Shell, handle_completions_command};
+use crate::commands::ls::handle_ls_command;
+use crate::commands::page::handle_page_download;
+use crate::commands::version::handle_version_command;
 
 /// confluence-dl - Export Confluence pages to Markdown
 #[derive(Debug, Parser)]
@@ -90,25 +101,6 @@ pub enum Command {
 }
 
 /// Authentication subcommands
-#[derive(Debug, Subcommand)]
-pub enum AuthCommand {
-  /// Test authentication credentials against Confluence API
-  Test,
-
-  /// Display current authentication configuration (without sensitive data)
-  Show,
-}
-
-/// Shell types for completion generation
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum Shell {
-  Bash,
-  Zsh,
-  Fish,
-  Powershell,
-  Elvish,
-}
-
 /// Normalize a URL by adding https:// if no scheme is present
 fn normalize_url(url: &str) -> Result<String, String> {
   let trimmed = url.trim();
@@ -321,6 +313,70 @@ impl Cli {
 
     Ok(())
   }
+}
+
+/// Parse CLI arguments, initialize shared services, and dispatch to the chosen
+/// command.
+pub async fn run() {
+  let cli = Cli::parse_args();
+
+  init_tracing(&cli.behavior);
+
+  // Create color scheme based on user preference
+  let colors = ColorScheme::new(cli.behavior.color);
+
+  // Validate CLI arguments
+  if let Err(e) = cli.validate() {
+    eprintln!("{} {}", colors.error("Error:"), e);
+    process::exit(4); // Invalid arguments exit code
+  }
+
+  // Handle subcommands
+  if let Some(ref command) = cli.command {
+    match command {
+      Command::Ls { target, max_depth } => {
+        handle_ls_command(target, *max_depth, &cli, &colors).await;
+      }
+      Command::Auth { subcommand } => {
+        handle_auth_command(subcommand, &cli, &colors).await;
+      }
+      Command::Version { json, short } => {
+        handle_version_command(*json, *short, &colors);
+      }
+      Command::Completions { shell } => {
+        handle_completions_command(*shell);
+      }
+    }
+    return;
+  }
+
+  // Handle main page download functionality
+  if let Some(ref page_input) = cli.page_input {
+    handle_page_download(page_input, &cli, &colors).await;
+  }
+}
+
+fn init_tracing(behavior: &BehaviorOptions) {
+  let level = if behavior.quiet {
+    LevelFilter::ERROR
+  } else {
+    match behavior.verbose {
+      0 => LevelFilter::WARN,
+      1 => LevelFilter::INFO,
+      2 => LevelFilter::DEBUG,
+      _ => LevelFilter::TRACE,
+    }
+  };
+
+  let env_filter = EnvFilter::builder()
+    .with_default_directive(level.into())
+    .from_env_lossy();
+
+  let _ = tracing_subscriber::fmt()
+    .with_env_filter(env_filter)
+    .with_target(false)
+    .with_writer(std::io::stderr)
+    .try_init();
 }
 
 /// Get custom styles for clap help output
