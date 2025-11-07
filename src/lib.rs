@@ -6,6 +6,7 @@
 pub mod attachments;
 pub mod cli;
 pub mod color;
+pub mod commands;
 pub mod confluence;
 pub mod credentials;
 pub mod images;

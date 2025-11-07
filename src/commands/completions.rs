@@ -5,16 +5,26 @@
 
 use std::io;
 
-use clap::CommandFactory;
+use clap::{CommandFactory, ValueEnum};
 use clap_complete::{Shell as CompletionShell, generate};
 
-use crate::cli::{Cli, Shell};
+use crate::cli::Cli;
+
+/// Supported shells for completion script generation.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum Shell {
+  Bash,
+  Zsh,
+  Fish,
+  Powershell,
+  Elvish,
+}
 
 /// Generate shell completion scripts for the requested shell.
 ///
 /// # Arguments
 /// * `shell` - Target shell to emit completions for, as chosen by the user.
-pub(crate) fn handle_completions_command(shell: Shell) {
+pub fn handle_completions_command(shell: Shell) {
   let mut cmd = Cli::command();
   let bin_name = cmd.get_name().to_string();
 

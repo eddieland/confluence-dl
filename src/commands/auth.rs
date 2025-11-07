@@ -8,10 +8,22 @@
 use std::os::unix::fs::PermissionsExt;
 use std::process;
 
-use crate::cli::{AuthCommand, Cli};
+use clap::Subcommand;
+
+use crate::cli::Cli;
 use crate::color::ColorScheme;
 use crate::confluence::{self, ConfluenceApi};
 use crate::credentials::{CredentialsProvider, NetrcProvider};
+
+/// Authentication subcommands exposed under `confluence-dl auth`.
+#[derive(Debug, Subcommand)]
+pub enum AuthCommand {
+  /// Test authentication credentials against the Confluence API.
+  Test,
+
+  /// Display current authentication configuration (without sensitive data).
+  Show,
+}
 
 /// Dispatch the authentication subcommands defined under `confluence-dl auth`.
 ///
@@ -24,7 +36,7 @@ use crate::credentials::{CredentialsProvider, NetrcProvider};
 /// * `cli` - Parsed CLI settings containing authentication, output, and
 ///   telemetry options.
 /// * `colors` - Shared color scheme used to render output consistently.
-pub(crate) async fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &ColorScheme) {
+pub async fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &ColorScheme) {
   match subcommand {
     AuthCommand::Test => {
       // Verify we have a base URL

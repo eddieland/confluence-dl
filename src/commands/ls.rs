@@ -25,7 +25,7 @@ use crate::confluence::{self, PageTree};
 /// * `max_depth` - Optional traversal depth limit (0 lists only the root).
 /// * `cli` - Top-level CLI options for auth, behavior, and networking.
 /// * `colors` - Shared color palette used to render terminal output.
-pub(crate) async fn handle_ls_command(target: &str, max_depth: Option<usize>, cli: &Cli, colors: &ColorScheme) {
+pub async fn handle_ls_command(target: &str, max_depth: Option<usize>, cli: &Cli, colors: &ColorScheme) {
   if let Err(error) = run_ls_command(target, max_depth, cli, colors).await {
     eprintln!("{} {}", colors.error("✗"), colors.error("Failed to list page tree"));
     eprintln!("  {}: {}", colors.emphasis("Error"), error);
