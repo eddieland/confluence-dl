@@ -2,7 +2,7 @@
 source: tests/e2e_tests.rs
 expression: markdown
 ---
-How about some **<span style="color: rgb(255,153,31)">te</span><span style="background-color: rgb(211,241,167)">xt</span>** _<span style="color: rgb(255,86,48)">form</span><span style="color: rgb(7,71,166)">atting</span>_?
+How about some **<span style="color: rgb(255,153,31)">te</span><span style="background-color: rgb(211,241,167)">xt</span>** _<span style="color: rgb(255,86,48)">for~~m~~</span><span style="color: rgb(7,71,166)">~~a~~tti<sub>n</sub><sup>g</sup></span>_?
 
 1 < 2
 

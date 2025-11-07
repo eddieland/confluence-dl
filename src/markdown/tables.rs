@@ -3,6 +3,7 @@
 //! Converts Confluence HTML tables to properly formatted Markdown tables.
 
 use roxmltree::Node;
+use unicode_width::UnicodeWidthStr;
 
 use super::MarkdownOptions;
 use super::utils::{get_element_text, matches_tag};
@@ -97,7 +98,7 @@ pub fn render_markdown_table(mut rows: Vec<Vec<String>>, compact: bool) -> Optio
   let mut column_widths = vec![0; column_count];
   for row in &rows {
     for (index, cell) in row.iter().enumerate() {
-      column_widths[index] = column_widths[index].max(cell.len());
+      column_widths[index] = column_widths[index].max(cell_display_width(cell));
     }
   }
 
@@ -145,8 +146,11 @@ fn format_row(row: &[String], column_widths: &[usize], compact: bool) -> String 
   for (cell, width) in row.iter().zip(column_widths) {
     line.push(' ');
     line.push_str(cell);
-    if !compact && *width > cell.len() {
-      line.push_str(&" ".repeat(width - cell.len()));
+    if !compact {
+      let cell_width = cell_display_width(cell);
+      if *width > cell_width {
+        line.push_str(&" ".repeat(width - cell_width));
+      }
     }
     line.push(' ');
     line.push('|');
@@ -221,4 +225,26 @@ mod tests {
     // Empty table should produce minimal output
     assert!(!output.contains("|"));
   }
+
+  #[test]
+  fn test_render_table_handles_emojis() {
+    assert_eq!(cell_display_width("😀"), 2);
+    assert_eq!(cell_display_width("🥲"), 2);
+    let rows = vec![
+      vec!["Emoji".to_string(), "Description".to_string()],
+      vec!["😀".to_string(), "Happy face".to_string()],
+      vec!["👍".to_string(), "Approval".to_string()],
+    ];
+
+    let output = render_markdown_table(rows, false).unwrap();
+    insta::assert_snapshot!(output, @r###"
+    | Emoji | Description |
+    | ----- | ----------- |
+    | 😀    | Happy face  |
+    | 👍    | Approval    |
+    "###);
+  }
+}
+fn cell_display_width(cell: &str) -> usize {
+  UnicodeWidthStr::width(cell)
 }
