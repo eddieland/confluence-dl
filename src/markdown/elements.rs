@@ -109,6 +109,30 @@ fn format_list_item(item: &str, prefix: &str) -> String {
   formatted
 }
 
+fn render_blockquote(content: &str) -> String {
+  let trimmed = content.trim_matches('\n');
+
+  if trimmed.trim().is_empty() {
+    return "\n>\n\n".to_string();
+  }
+
+  let mut result = String::new();
+  result.push('\n');
+
+  for line in trimmed.lines() {
+    if line.trim().is_empty() {
+      result.push_str(">\n");
+    } else {
+      result.push_str("> ");
+      result.push_str(line.trim_end());
+      result.push('\n');
+    }
+  }
+
+  result.push('\n');
+  result
+}
+
 fn convert_layout_cell(cell: Node, options: &MarkdownOptions) -> String {
   let mut content = String::new();
 
@@ -367,6 +391,12 @@ fn convert_element_node(child: Node, options: &MarkdownOptions) -> String {
       }
     }
 
+    // Blockquotes
+    "blockquote" => {
+      let inner = convert_node_to_markdown(child, options);
+      result.push_str(&render_blockquote(&inner));
+    }
+
     // Lists
     "ul" => {
       result.push('\n');
@@ -612,6 +642,28 @@ mod tests {
     // escaped.
     let output = result.escape_default();
     insta::assert_snapshot!(output, @r"- Item 1\n- Item 2\n\n      \n1. First\n2. Second\n");
+  }
+
+  #[test]
+  fn test_convert_blockquote_simple() {
+    let input = "<blockquote><p>Quote text</p></blockquote>";
+    let output = convert_to_markdown(input);
+    assert_eq!(output, "> Quote text\n");
+  }
+
+  #[test]
+  fn test_convert_blockquote_with_multiple_paragraphs() {
+    let input = "<blockquote><p>First.</p><p>Second.</p></blockquote>";
+    let output = convert_to_markdown(input);
+    assert_eq!(output, "> First.\n>\n> Second.\n");
+  }
+
+  #[test]
+  fn test_convert_nested_blockquotes() {
+    let input = "<blockquote><p>Outer</p><blockquote><p>Inner</p></blockquote></blockquote>";
+    let output = convert_to_markdown(input);
+    assert!(output.contains("> Outer"));
+    assert!(output.contains("> > Inner"));
   }
 
   #[test]
