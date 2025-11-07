@@ -14,9 +14,11 @@ mod basic;
 mod code;
 mod decisions;
 mod emoji_macros;
+mod excerpts;
 mod expand;
 mod jira;
 
+pub(crate) use admonitions::render_admonition_block;
 pub use decisions::convert_adf_extension_to_markdown;
 
 /// Signature used by all macro handlers.
@@ -35,6 +37,10 @@ const HANDLERS: &[Handler] = &[
   Handler {
     names: &["note", "info", "warning", "tip"],
     func: admonitions::handle_macro,
+  },
+  Handler {
+    names: &["excerpt"],
+    func: excerpts::handle_macro,
   },
   Handler {
     names: &["code", "code-block"],
@@ -379,6 +385,49 @@ line 2]]></ac:plain-text-body>
       output,
       "\n> _Jira issues macro (JQL: project = ABC ORDER BY created DESC). Dynamic content not exported._\n\n"
     );
+  }
+
+  #[test]
+  fn test_convert_excerpt_macro_with_panel() {
+    let input = r#"
+      <ac:structured-macro ac:name="excerpt">
+        <ac:rich-text-body>
+          <p>This is an excerpt.</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
+
+    assert_eq!(output, "\n> **Excerpt:** This is an excerpt.\n\n");
+  }
+
+  #[test]
+  fn test_convert_excerpt_macro_without_panel() {
+    let input = r#"
+      <ac:structured-macro ac:name="excerpt">
+        <ac:parameter ac:name="nopanel">true</ac:parameter>
+        <ac:rich-text-body>
+          <p>This is inline.</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
+
+    assert_eq!(output, "This is inline.\n\n");
   }
 
   #[test]

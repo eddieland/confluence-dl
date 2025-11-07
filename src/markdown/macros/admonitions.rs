@@ -29,21 +29,11 @@ pub(super) fn handle_macro(
     .map(convert_node)
     .unwrap_or_else(|| get_element_text(element));
 
-  Some(format_admonition_block(macro_name, title.trim(), body.trim()))
+  let heading = resolve_heading(macro_name, title.trim());
+  Some(render_admonition_block(&heading, body.trim()))
 }
 
-/// Formats the Markdown blockquote for an admonition macro.
-///
-/// # Arguments
-/// * `macro_name` - Macro name used to pick the default title when none is
-///   provided.
-/// * `title` - Explicit title supplied by Confluence, already trimmed.
-/// * `body` - Markdown body contents, expected to be trimmed and possibly
-///   multiline.
-///
-/// # Returns
-/// Markdown blockquote containing the heading and body lines.
-fn format_admonition_block(macro_name: &str, title: &str, body: &str) -> String {
+fn resolve_heading(macro_name: &str, explicit_title: &str) -> String {
   let default_title = match macro_name {
     "info" => "Info",
     "warning" => "Warning",
@@ -51,7 +41,24 @@ fn format_admonition_block(macro_name: &str, title: &str, body: &str) -> String 
     _ => "Note",
   };
 
-  let heading = if title.is_empty() { default_title } else { title };
+  if explicit_title.is_empty() {
+    default_title.to_string()
+  } else {
+    explicit_title.to_string()
+  }
+}
+
+/// Formats the Markdown blockquote for an admonition macro.
+///
+/// # Arguments
+/// * `heading` - Title to display for the admonition.
+/// * `body` - Markdown body contents, expected to be trimmed and possibly
+///   multiline.
+///
+/// # Returns
+/// Markdown blockquote containing the heading and body lines.
+pub(crate) fn render_admonition_block(heading: &str, body: &str) -> String {
+  let body = body.trim();
 
   if body.is_empty() {
     return format!("\n> **{heading}:**\n\n");
