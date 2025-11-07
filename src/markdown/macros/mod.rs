@@ -543,6 +543,49 @@ line 2]]></ac:plain-text-body>
   }
 
   #[test]
+  fn test_convert_adf_panel_renders_note() {
+    let input = concat!(
+      "<ac:adf-extension>",
+      "<ac:adf-node type=\"panel\">",
+      "<ac:adf-attribute key=\"panel-type\">note</ac:adf-attribute>",
+      "<ac:adf-content><p>This is Note.</p><p>Next line.</p></ac:adf-content>",
+      "</ac:adf-node>",
+      "<ac:adf-fallback>Fallback panel markup.</ac:adf-fallback>",
+      "</ac:adf-extension>"
+    );
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let extension = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:adf-extension"))
+      .unwrap();
+    let output = convert_adf_extension_to_markdown(extension, &simple_convert_node);
+    assert!(output.contains("> **Note:** This is Note.Next line."));
+    assert!(!output.contains("Fallback panel markup"));
+  }
+
+  #[test]
+  fn test_convert_adf_panel_uses_custom_title() {
+    let input = concat!(
+      "<ac:adf-extension>",
+      "<ac:adf-node type=\"panel\">",
+      "<ac:adf-attribute key=\"panel-type\">custom</ac:adf-attribute>",
+      "<ac:adf-attribute key=\"panel-title\">Important</ac:adf-attribute>",
+      "<ac:adf-content><p>Body copy.</p></ac:adf-content>",
+      "</ac:adf-node>",
+      "</ac:adf-extension>"
+    );
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let extension = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:adf-extension"))
+      .unwrap();
+    let output = convert_adf_extension_to_markdown(extension, &simple_convert_node);
+    assert!(output.contains("> **Important:** Body copy."));
+  }
+
+  #[test]
   fn test_convert_decision_macro() {
     let input = r#"
       <ac:structured-macro ac:name="decision">
