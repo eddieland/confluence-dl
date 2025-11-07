@@ -20,6 +20,9 @@ confluence-dl https://your-domain.atlassian.net/wiki/pages/123456/My+Page
 # Export a page with all children (recursive)
 confluence-dl https://your-domain.atlassian.net/wiki/pages/123456 --children
 
+# Inspect the page tree without downloading anything
+confluence-dl ls https://your-domain.atlassian.net/wiki/pages/123456 --max-depth 2
+
 # Test your authentication first
 confluence-dl auth test
 ```
@@ -81,6 +84,18 @@ confluence-dl 123456 --url https://your-domain.atlassian.net --children --dry-ru
 ```
 
 **Output**: Shows the page tree and what files would be created, without downloading anything.
+
+### 🌲 "I want to inspect the page tree before exporting"
+
+Use the `ls` subcommand to print the Confluence hierarchy without writing files:
+
+```bash
+confluence-dl ls https://your-domain.atlassian.net/wiki/pages/123456/My+Page
+# Limit traversal depth (0 = root only):
+confluence-dl ls 123456 --url https://your-domain.atlassian.net --max-depth 2
+```
+
+**Output**: An ASCII tree that lists each page title, ID, status, and depth so you can see what would be exported.
 
 ### ⚙️ "I want to customize the output"
 

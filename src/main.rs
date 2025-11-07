@@ -17,6 +17,7 @@ use cli::{Cli, Command};
 use color::ColorScheme;
 use commands::auth::handle_auth_command;
 use commands::completions::handle_completions_command;
+use commands::ls::handle_ls_command;
 use commands::page::handle_page_download;
 use commands::version::handle_version_command;
 use tracing_subscriber::EnvFilter;
@@ -40,6 +41,9 @@ async fn main() {
   // Handle subcommands
   if let Some(ref command) = cli.command {
     match command {
+      Command::Ls { target, max_depth } => {
+        handle_ls_command(target, *max_depth, &cli, &colors).await;
+      }
       Command::Auth { subcommand } => {
         handle_auth_command(subcommand, &cli, &colors).await;
       }

@@ -6,5 +6,6 @@
 
 pub mod auth;
 pub mod completions;
+pub mod ls;
 pub mod page;
 pub mod version;

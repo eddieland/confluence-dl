@@ -13,7 +13,7 @@
   - CLI parsing (`cli.rs`), color utilities (`color.rs`), Markdown conversion (`markdown/`).
   - Confluence integration (`confluence/`): async HTTP client, API trait, models, and tree traversal helpers.
   - Asset handling (`attachments.rs`, `images.rs`) and credential discovery (`credentials/`).
-  - Command handlers in `src/commands/` encapsulate `auth`, `completions`, `page`, and `version` workflows.
+  - Command handlers in `src/commands/` encapsulate `auth`, `completions`, `ls`, `page`, and `version` workflows.
 - Project scaffolding (`Cargo.toml`, `build.rs`, `Makefile`, toolchain configs) sits at the repo root.
 
 ### Build System
@@ -123,12 +123,6 @@ Based on [README.md](README.md:1):
 4. Download and reference embedded images
 5. Convert internal Confluence links to Markdown-compatible links
 6. Support authentication via env vars or CLI flags
-
-## Current State
-
-- **Implemented**: End-to-end page export pipeline (CLI parsing, Confluence client, Markdown conversion, attachments/images download, credential discovery), colorized UX, snapshot-tested fixtures
-- **Not Implemented**: Top-level space export command, advanced Markdown customization, rich progress reporting
-- **Next Steps**: Space-wide export workflows, additional content transforms, polish around error reporting and telemetry
 
 ## Color and Visual Design
 
