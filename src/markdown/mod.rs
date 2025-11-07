@@ -25,9 +25,11 @@
 //! assert!(markdown.contains("**Bold text**"));
 //! ```
 
+use std::time::Instant;
+
 use anyhow::Result;
 use roxmltree::Document;
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 
 // Module declarations
 mod elements;
@@ -85,12 +87,19 @@ pub fn storage_to_markdown_with_options(storage_content: &str, options: &Markdow
   );
 
   // Parse the HTML/XML content
+  let parse_start = Instant::now();
   let document = Document::parse(&wrapped).map_err(|e| {
     error!("XML parse error: {e}");
     error!("Wrapped XML length: {} chars", wrapped.len());
     trace!("Full wrapped XML:\n{wrapped}");
     anyhow::anyhow!("Failed to parse Confluence storage content: {e}")
   })?;
+
+  debug!(
+    "Parsed Confluence storage document in {duration:?} (length: {length} chars)",
+    duration = parse_start.elapsed(),
+    length = wrapped.len()
+  );
 
   // Convert to markdown
   let markdown = convert_node_to_markdown(document.root_element(), options);
