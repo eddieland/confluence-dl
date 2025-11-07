@@ -1,3 +1,9 @@
+//! `.netrc` credential discovery.
+//!
+//! Provides a [`CredentialsProvider`] implementation that reads the user's
+//! `~/.netrc` file to locate Confluence credentials. This keeps Atlassian API
+//! tokens outside of shell history and supports multiple hosts.
+
 use super::{Credential, CredentialError, CredentialsProvider};
 
 /// A credentials provider that reads from `.netrc` files.
@@ -25,6 +31,18 @@ impl NetrcProvider {
 }
 
 impl CredentialsProvider for NetrcProvider {
+  /// Resolve credentials for `host` by scanning the user's `.netrc`.
+  ///
+  /// # Arguments
+  /// * `host` - Hostname to look up (e.g., `company.atlassian.net`).
+  ///
+  /// # Returns
+  /// * `Ok(Some(Credential))` when the `.netrc` file contains a matching entry.
+  /// * `Ok(None)` when the file is present but no entry exists for the host.
+  ///
+  /// # Errors
+  /// Returns `Err(CredentialError)` when the home directory cannot be
+  /// determined, the `.netrc` file is unreadable, or parsing fails.
   fn get_credentials(&self, host: &str) -> Result<Option<Credential>, CredentialError> {
     // Get the home directory
     let home = std::env::var("HOME").map_err(|_| CredentialError::NetrcNotFound)?;

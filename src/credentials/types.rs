@@ -1,3 +1,9 @@
+//! Strongly typed credentials and related errors.
+//!
+//! These types are shared between different credential providers and the
+//! higher-level CLI logic so that callers can reason about usernames, tokens,
+//! and failure modes consistently.
+
 use std::fmt;
 
 /// Represents a set of credentials for authenticating with a host.

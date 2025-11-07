@@ -6,8 +6,11 @@ use url::Url;
 /// Information extracted from a Confluence URL.
 #[derive(Debug, Clone)]
 pub struct UrlInfo {
+  /// Scheme and host of the Confluence instance (e.g., `https://example.atlassian.net`).
   pub base_url: String,
+  /// Numeric identifier of the page derived from the URL.
   pub page_id: String,
+  /// Optional Confluence space key when the URL encodes one.
   pub space_key: Option<String>,
 }
 
