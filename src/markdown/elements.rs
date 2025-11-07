@@ -109,6 +109,18 @@ fn format_list_item(item: &str, prefix: &str) -> String {
   formatted
 }
 
+/// Converts arbitrary content into a Markdown blockquote.
+///
+/// Trims surrounding newlines, prefixes non-empty lines with `"> "`, and keeps
+/// blank lines as plain `">"` markers to preserve paragraph breaks. Purely
+/// whitespace input is rendered as an empty blockquote surrounded by blank
+/// lines so surrounding content stays separated.
+///
+/// # Arguments
+/// * `content` - Raw text that should be wrapped in blockquote syntax.
+///
+/// # Returns
+/// Markdown-formatted blockquote with blank lines before and after it.
 fn render_blockquote(content: &str) -> String {
   let trimmed = content.trim_matches('\n');
 
