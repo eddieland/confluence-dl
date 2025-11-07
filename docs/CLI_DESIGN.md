@@ -33,7 +33,7 @@ confluence-dl [OPTIONS] <PAGE_URL_OR_ID>
 
 ### Arguments
 
-- `<PAGE_URL_OR_ID>`: Full page URL or numeric page ID
+- `<PAGE_URL_OR_ID>`: Full page URL or numeric page ID. Required unless a subcommand is used.
 
 ### Behavior
 
@@ -54,7 +54,10 @@ confluence-dl 123456 --url https://example.atlassian.net
 # Download with children (recursive)
 confluence-dl 123456 --url https://example.atlassian.net --children
 
-# Limit recursion depth
+# Download with children using the -r shorthand
+confluence-dl 123456 --url https://example.atlassian.net -r
+
+# Limit recursion depth (requires --children or -r)
 confluence-dl https://example.atlassian.net/wiki/pages/123456 --children --max-depth 2
 
 # Include attachments
@@ -64,12 +67,12 @@ confluence-dl https://example.atlassian.net/wiki/pages/123456 --attachments
 ### Page-Specific Options
 
 ```
-  --children                   Download child pages recursively
+  -r, --children                Download child pages recursively (alias: --recursive)
 
-  --max-depth <N>              Maximum depth when downloading children
-                               [default: unlimited]
+      --max-depth <N>           Maximum depth when downloading children
+                                [requires: --children]
 
-  --attachments                Download page attachments
+      --attachments             Download page attachments
 ```
 
 ## Debugging & Introspection Commands
@@ -237,8 +240,12 @@ These options are available for all commands:
   -o, --output <DIR>       Output directory
                            [default: ./confluence-export]
 
-  --overwrite              Overwrite existing files
+      --overwrite          Overwrite existing files
                            [default: skip existing]
+
+      --save-raw           Save raw Confluence storage format alongside Markdown
+
+      --compact-tables     Render Markdown tables without padding columns for alignment
 ```
 
 _Note: The CLI currently exports Markdown only. Additional formats will be reconsidered once a concrete data model exists._
@@ -246,13 +253,14 @@ _Note: The CLI currently exports Markdown only. Additional formats will be recon
 ### Behavior Options
 
 ```
-  --dry-run                Show what would be downloaded without actually downloading
+      --dry-run            Show what would be downloaded without actually downloading
 
-  --verbose, -v            Increase verbosity (-v, -vv, -vvv)
+  -v, --verbose            Increase verbosity (-v info, -vv debug, -vvv trace)
 
-  --quiet, -q              Suppress all output except errors
+  -q, --quiet              Suppress all output except errors
+                           [conflicts with: --verbose]
 
-  --color <WHEN>           Colorize output
+      --color <WHEN>       Colorize output
                            [possible: auto, always, never]
                            [default: auto]
 ```
@@ -260,27 +268,30 @@ _Note: The CLI currently exports Markdown only. Additional formats will be recon
 ### Image & Link Options
 
 ```
-  --download-images        Download embedded images
+      --download-images[=<BOOL>]
+                           Download embedded images (`--download-images=false` disables)
                            [default: true]
 
-  --images-dir <DIR>       Directory for images (relative to output)
+      --images-dir <DIR>   Directory for images (relative to output)
                            [default: images]
 
-  --preserve-anchors       Keep Confluence anchor IDs
+      --preserve-anchors   Keep Confluence anchor IDs
                            [default: false]
 ```
 
 ### Performance Options
 
 ```
-  --parallel <N>           Number of parallel downloads (-1 = available cores)
+      --parallel <N>       Number of parallel downloads (-1 = available cores)
                            [default: 4]
 
-  --rate-limit <N>         Max requests per second
+      --rate-limit <N>     Max requests per second
                            [default: 10]
 
-  --timeout <SECONDS>      Request timeout
+      --timeout <SECONDS>  Request timeout in seconds
                            [default: 30]
+
+_Validation:_ `--parallel` must be `-1` (auto) or at least `1`, and `--rate-limit` must be at least `1` request/second.
 ```
 
 ## Help System
@@ -382,22 +393,18 @@ Suggestion:
 
 ### Page ID vs URL Handling
 
-```rust
-fn parse_page_input(input: &str, base_url: Option<&str>) -> Result<PageTarget> {
-    // Full URL provided
-    if input.contains("://") {
-        return Ok(PageTarget::Url(input.to_string()));
-    }
+- URLs are accepted with or without a scheme; values without `http(s)://` are normalized to `https://`.
+- Numeric IDs resolve to the configured `--url` base host.
+- Validation ensures ambiguous inputs (non-numeric strings without a scheme) produce helpful errors.
 
-    // Numeric page ID - requires base URL
-    if let Ok(page_id) = input.parse::<u64>() {
-        let base = base_url.ok_or("--url required when using page ID")?;
-        return Ok(PageTarget::Id { id: page_id, base_url: base.to_string() });
-    }
+### Input Validation
 
-    Err("Invalid page input: must be a URL or numeric page ID")
-}
-```
+- Either `<PAGE_URL_OR_ID>` or a subcommand must be provided.
+- Numeric page IDs require `--url` to supply the base Confluence host.
+- `--max-depth` can only be used together with `--children`/`-r`.
+- URL inputs are normalized to include `https://` if no scheme is provided.
+- `--parallel` values below `-1` or equal to `0` are rejected.
+- `--rate-limit` must be at least `1` request per second.
 
 ### Using clap_complete
 
