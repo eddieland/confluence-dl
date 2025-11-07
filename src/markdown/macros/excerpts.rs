@@ -20,6 +20,17 @@ pub(super) fn handle_macro(
     .map(convert_node)
     .unwrap_or_else(|| get_element_text(element));
 
+  let hidden = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "hidden")
+    .map(|param| {
+      let value = get_element_text(param);
+      value.trim().is_empty() || value.trim().eq_ignore_ascii_case("true")
+    })
+    .unwrap_or(false);
+
+  if hidden {
+    return Some(String::new());
+  }
+
   let no_panel = find_child_by_tag_and_attr(element, "ac:parameter", "ac:name", "nopanel")
     .map(|param| get_element_text(param).trim().eq_ignore_ascii_case("true"))
     .unwrap_or(false);

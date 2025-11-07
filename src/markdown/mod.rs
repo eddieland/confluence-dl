@@ -171,6 +171,22 @@ mod tests {
   }
 
   #[test]
+  fn test_convert_hidden_excerpt_macro() {
+    let input = r#"
+      <ac:structured-macro ac:name="excerpt">
+        <ac:parameter ac:name="hidden">true</ac:parameter>
+        <ac:rich-text-body>
+          <p>Hidden excerpt content.</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let output = render(input);
+    assert!(!output.contains("Hidden excerpt content."));
+    assert!(!output.contains("**Excerpt:**"));
+  }
+
+  #[test]
   fn test_convert_legacy_note_block() {
     let input = r#"
       <ac:note>

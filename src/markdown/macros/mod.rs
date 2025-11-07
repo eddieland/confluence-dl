@@ -431,6 +431,28 @@ line 2]]></ac:plain-text-body>
   }
 
   #[test]
+  fn test_convert_hidden_excerpt_macro() {
+    let input = r#"
+      <ac:structured-macro ac:name="excerpt">
+        <ac:parameter ac:name="hidden">true</ac:parameter>
+        <ac:rich-text-body>
+          <p>You should not see me.</p>
+        </ac:rich-text-body>
+      </ac:structured-macro>
+    "#;
+
+    let wrapped = wrap_with_namespaces(input);
+    let document = Document::parse(&wrapped).unwrap();
+    let macro_node = document
+      .descendants()
+      .find(|node| matches_tag(*node, "ac:structured-macro"))
+      .unwrap();
+    let output = convert_macro_to_markdown(macro_node, &simple_convert_node, &MarkdownOptions::default());
+
+    assert_eq!(output, "");
+  }
+
+  #[test]
   fn test_convert_task_list() {
     let input = r#"
       <ac:task-list>
