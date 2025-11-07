@@ -6,7 +6,7 @@
 use roxmltree::Node;
 use tracing::{debug, trace};
 
-use super::utils::{get_attribute, get_element_text};
+use super::utils::{get_attribute, get_element_text, get_plain_text};
 
 /// Converts an emoji element to Markdown by resolving its codepoint.
 ///
@@ -88,7 +88,7 @@ pub fn convert_span_emoji(element: Node) -> Option<String> {
     return Some(emoji);
   }
 
-  let text = get_element_text(element);
+  let text = get_plain_text(element);
   if !text.trim().is_empty() {
     debug!("Span emoji from text: {text}");
     return Some(text);
