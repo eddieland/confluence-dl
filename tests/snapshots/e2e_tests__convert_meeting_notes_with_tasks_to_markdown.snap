@@ -1,24 +1,25 @@
 ---
 source: tests/e2e_tests.rs
+assertion_line: 632
 expression: markdown
 ---
-## 🗓 Date
+## 🗓 Date
 
 2025-10-07
 
-## 👥 Participants
+## 👥 Participants
 
 - @user:example-account-id
 
-## 🥅 Goals
+## 🥅 Goals
 
-## 🗣 Discussion topics
+## 🗣 Discussion topics
 
 | Time  | Topic          |
 | ----- | -------------- |
 | 10:00 | Project update |
 
-## ✅ Action items
+## ✅ Action items
 
 - [ ] Review architecture proposal
 - [x] Update documentation
