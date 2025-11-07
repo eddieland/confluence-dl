@@ -250,11 +250,7 @@ impl ConfluenceApi for ConfluenceClient {
   }
 
   async fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()> {
-    let full_url = if url.starts_with("http://") || url.starts_with("https://") {
-      url.to_string()
-    } else {
-      format!("{}{}", self.base_url, url)
-    };
+    let full_url = self.resolve_attachment_url(url);
 
     self.rate_limiter.acquire().await;
 
@@ -327,6 +323,24 @@ impl ConfluenceApi for ConfluenceClient {
   }
 }
 
+impl ConfluenceClient {
+  fn resolve_attachment_url(&self, url: &str) -> String {
+    if url.starts_with("http://") || url.starts_with("https://") {
+      return url.to_string();
+    }
+
+    if url.starts_with("/wiki/") {
+      return format!("{}{}", self.base_url, url);
+    }
+
+    if url.starts_with("/download/") {
+      return format!("{}/wiki{}", self.base_url, url);
+    }
+
+    format!("{}{}", self.base_url, url)
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use base64::Engine as _;
@@ -389,6 +403,39 @@ mod tests {
       start.elapsed() >= Duration::from_millis(900),
       "expected at least 900ms elapsed, got {:?}",
       start.elapsed()
+    );
+  }
+
+  #[test]
+  fn resolve_attachment_url_handles_absolute_urls() {
+    let client =
+      ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 5).unwrap();
+
+    let absolute = "https://cdn.example.com/files/image.png";
+    assert_eq!(client.resolve_attachment_url(absolute), absolute);
+  }
+
+  #[test]
+  fn resolve_attachment_url_prefixes_wiki_when_missing() {
+    let client =
+      ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 5).unwrap();
+
+    let relative = "/download/attachments/12345/image.png";
+    assert_eq!(
+      client.resolve_attachment_url(relative),
+      "https://example.atlassian.net/wiki/download/attachments/12345/image.png"
+    );
+  }
+
+  #[test]
+  fn resolve_attachment_url_keeps_existing_wiki_prefix() {
+    let client =
+      ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 5).unwrap();
+
+    let relative = "/wiki/download/attachments/12345/image.png";
+    assert_eq!(
+      client.resolve_attachment_url(relative),
+      "https://example.atlassian.net/wiki/download/attachments/12345/image.png"
     );
   }
 }
