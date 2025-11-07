@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use roxmltree::{Node, NodeType};
 
+use super::render_admonition_block;
 use crate::markdown::MarkdownOptions;
 use crate::markdown::utils::{
   find_child_by_tag, find_child_by_tag_and_attr, get_attribute, get_element_text, matches_tag,
@@ -48,7 +49,7 @@ pub(super) fn handle_macro(
 /// otherwise the fallback rendering of embedded nodes.
 pub fn convert_adf_extension_to_markdown(element: Node, convert_node: &dyn Fn(Node) -> String) -> String {
   let mut result = String::new();
-  let mut decision_rendered = false;
+  let mut preferred_rendering = false;
   let mut segments: Vec<(String, bool)> = Vec::new();
 
   for child in element.children().filter(|child| child.is_element()) {
@@ -59,7 +60,14 @@ pub fn convert_adf_extension_to_markdown(element: Node, convert_node: &dyn Fn(No
           if !rendered.is_empty() {
             flush_adf_segments(&mut result, &mut segments, false);
             result.push_str(&rendered);
-            decision_rendered = true;
+            preferred_rendering = true;
+          }
+        }
+        Some("panel") => {
+          if let Some(rendered) = convert_adf_panel(child, convert_node) {
+            flush_adf_segments(&mut result, &mut segments, false);
+            result.push_str(&rendered);
+            preferred_rendering = true;
           }
         }
         _ => append_adf_segment(&mut segments, convert_node(child), false),
@@ -71,7 +79,7 @@ pub fn convert_adf_extension_to_markdown(element: Node, convert_node: &dyn Fn(No
     }
   }
 
-  if decision_rendered {
+  if preferred_rendering {
     flush_adf_segments(&mut result, &mut segments, false);
     result
   } else {
@@ -107,6 +115,78 @@ fn flush_adf_segments(result: &mut String, segments: &mut Vec<(String, bool)>, i
   }
 
   segments.clear();
+}
+
+fn convert_adf_panel(node: Node, convert_node: &dyn Fn(Node) -> String) -> Option<String> {
+  let mut panel_type: Option<String> = None;
+  let mut explicit_title: Option<String> = None;
+  let mut body_segments: Vec<String> = Vec::new();
+
+  for child in node.children().filter(|child| child.is_element()) {
+    if matches_tag(child, "ac:adf-attribute") {
+      match get_attribute(child, "key").as_deref() {
+        Some("panel-type") => {
+          let value = get_element_text(child).trim().to_lowercase();
+          if !value.is_empty() {
+            panel_type = Some(value);
+          }
+        }
+        Some("panel-title") => {
+          let value = get_element_text(child).trim().to_string();
+          if !value.is_empty() {
+            explicit_title = Some(value);
+          }
+        }
+        _ => {}
+      }
+    } else if matches_tag(child, "ac:adf-content") {
+      let rendered = convert_node(child);
+      let trimmed = rendered.trim();
+      if !trimmed.is_empty() {
+        body_segments.push(trimmed.to_string());
+      }
+    }
+  }
+
+  if body_segments.is_empty() {
+    return None;
+  }
+
+  let body = body_segments.join("\n\n");
+  let heading = resolve_panel_heading(panel_type.as_deref(), explicit_title.as_deref());
+
+  Some(render_admonition_block(&heading, &body))
+}
+
+fn resolve_panel_heading(panel_type: Option<&str>, explicit_title: Option<&str>) -> String {
+  if let Some(title) = explicit_title {
+    let trimmed = title.trim();
+    if !trimmed.is_empty() {
+      return trimmed.to_string();
+    }
+  }
+
+  match panel_type {
+    Some("info") => "Info".to_string(),
+    Some("note") => "Note".to_string(),
+    Some("success") => "Success".to_string(),
+    Some("tip") => "Tip".to_string(),
+    Some("warning") => "Warning".to_string(),
+    Some("error") => "Error".to_string(),
+    Some(custom) if !custom.is_empty() => capitalize_first_letter(custom),
+    _ => "Panel".to_string(),
+  }
+}
+
+fn capitalize_first_letter(value: &str) -> String {
+  let mut chars = value.chars();
+  let Some(first) = chars.next() else {
+    return String::new();
+  };
+
+  let mut result = first.to_uppercase().collect::<String>();
+  result.push_str(chars.as_str());
+  result
 }
 
 /// Aggregated decision metadata used for rendering Markdown output.
