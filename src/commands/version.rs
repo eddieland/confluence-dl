@@ -1,6 +1,17 @@
+//! Version/metadata reporting.
+//!
+//! Implements the `confluence-dl version` subcommand, which can output either
+//! a human-readable summary or a machine-readable JSON document describing the
+//! build.
+
 use crate::color::ColorScheme;
 
-/// Handle version command
+/// Render version and build metadata in JSON or human-readable form.
+///
+/// # Arguments
+/// * `json` - When `true`, emit a JSON document instead of colored text.
+/// * `short` - When `true`, print only the semantic version string.
+/// * `colors` - Shared color palette for styled terminal output.
 pub(crate) fn handle_version_command(json: bool, short: bool, colors: &ColorScheme) {
   let version = env!("CARGO_PKG_VERSION");
 
@@ -40,7 +51,13 @@ pub(crate) fn handle_version_command(json: bool, short: bool, colors: &ColorSche
   }
 }
 
-/// Format Unix timestamp as ISO 8601 UTC string
+/// Convert the embedded build timestamp into a human-readable ISO-8601 string.
+///
+/// # Arguments
+/// * `timestamp` - Unix epoch seconds encoded as a string.
+///
+/// # Returns
+/// ISO-8601 UTC timestamp when parsing succeeds, otherwise the raw input.
 fn format_timestamp(timestamp: &str) -> String {
   timestamp
     .parse::<i64>()
@@ -56,10 +73,10 @@ fn format_timestamp(timestamp: &str) -> String {
     .unwrap_or_else(|| timestamp.to_string())
 }
 
-/// Get Rust compiler version
+/// Retrieve the Rust compiler version captured at build time.
 ///
-/// Returns the actual rustc version used to build this binary,
-/// captured at build time by build.rs.
+/// # Returns
+/// A string describing the `rustc` version bundled via `build.rs`.
 fn rustc_version() -> String {
   env!("RUSTC_VERSION").to_string()
 }

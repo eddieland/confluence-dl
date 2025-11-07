@@ -1,3 +1,9 @@
+//! Authentication subcommand handlers.
+//!
+//! Covers both `confluence-dl auth test`, which performs a live API call, and
+//! `confluence-dl auth show`, which prints the currently detected credential
+//! sources.
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::process;
@@ -7,7 +13,17 @@ use crate::color::ColorScheme;
 use crate::confluence::{self, ConfluenceApi};
 use crate::credentials::{CredentialsProvider, NetrcProvider};
 
-/// Handle authentication subcommands
+/// Dispatch the authentication subcommands defined under `confluence-dl auth`.
+///
+/// `auth test` validates that the provided credentials work against the
+/// Confluence API, while `auth show` prints a human-readable summary of the
+/// resolved credential sources.
+///
+/// # Arguments
+/// * `subcommand` - Auth-specific variant to execute.
+/// * `cli` - Parsed CLI settings containing authentication, output, and
+///   telemetry options.
+/// * `colors` - Shared color scheme used to render output consistently.
 pub(crate) async fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &ColorScheme) {
   match subcommand {
     AuthCommand::Test => {
@@ -118,7 +134,14 @@ pub(crate) async fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, col
   }
 }
 
-/// Display authentication configuration with source information
+/// Display the currently configured authentication sources and values.
+///
+/// The output highlights whether values came from CLI flags, environment
+/// variables, or a `.netrc` file so that users can quickly diagnose conflicts.
+///
+/// # Arguments
+/// * `cli` - Parsed CLI options containing the user-facing configuration.
+/// * `colors` - Color palette used for consistent, accessible output.
 fn show_auth_config(cli: &Cli, colors: &ColorScheme) {
   println!("{}\n", colors.emphasis("Authentication Configuration"));
 
@@ -248,7 +271,23 @@ fn show_auth_config(cli: &Cli, colors: &ColorScheme) {
   }
 }
 
-/// Load credentials from CLI args, env vars, or .netrc
+/// Resolve Confluence credentials from CLI flags, environment variables, or
+/// `.netrc`.
+///
+/// The lookup order honors explicit CLI input first, then falls back to the
+/// host-specific entry in `.netrc`. The helper returns both username and API
+/// token so callers can immediately construct an API client.
+///
+/// # Arguments
+/// * `base_url` - Base Confluence URL whose host is used for `.netrc` lookups.
+/// * `cli` - Parsed CLI struct carrying the `--user`/`--token` overrides.
+///
+/// # Returns
+/// A tuple of `(username, token)` suitable for authenticating with Confluence.
+///
+/// # Errors
+/// Returns an error when the base URL is invalid, when `.netrc` parsing fails,
+/// or when no credential source provides both username and token.
 pub(crate) fn load_credentials(base_url: &str, cli: &Cli) -> anyhow::Result<(String, String)> {
   // Try CLI args or env vars first
   let username = cli.auth.user.clone();
@@ -274,7 +313,16 @@ pub(crate) fn load_credentials(base_url: &str, cli: &Cli) -> anyhow::Result<(Str
   )
 }
 
-/// Extract hostname from a URL string
+/// Extract the hostname component from a Confluence base URL string.
+///
+/// This lightweight helper avoids pulling in an additional URL parser for the
+/// subset of logic needed by credential discovery.
+///
+/// # Arguments
+/// * `url` - Fully qualified or scheme-less host string.
+///
+/// # Returns
+/// The hostname portion of the URL, if one can be derived.
 fn extract_host(url: &str) -> Option<String> {
   // Simple URL parsing to extract the host
   if let Some(start) = url.find("://") {

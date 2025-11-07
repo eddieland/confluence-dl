@@ -12,8 +12,11 @@ use super::models::Page;
 /// Represents a page tree with hierarchical children.
 #[derive(Debug, Clone)]
 pub struct PageTree {
+  /// Metadata and storage content for the page at this node.
   pub page: Page,
+  /// Descendant pages nested under this node.
   pub children: Vec<PageTree>,
+  /// Zero-based depth where `0` is the original root.
   pub depth: usize,
 }
 

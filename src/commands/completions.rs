@@ -1,3 +1,8 @@
+//! Shell completion generation.
+//!
+//! Provides the implementation behind `confluence-dl completions`, emitting
+//! tab-completion scripts for the supported shells.
+
 use std::io;
 
 use clap::CommandFactory;
@@ -5,7 +10,10 @@ use clap_complete::{Shell as CompletionShell, generate};
 
 use crate::cli::{Cli, Shell};
 
-/// Handle completions command
+/// Generate shell completion scripts for the requested shell.
+///
+/// # Arguments
+/// * `shell` - Target shell to emit completions for, as chosen by the user.
 pub(crate) fn handle_completions_command(shell: Shell) {
   let mut cmd = Cli::command();
   let bin_name = cmd.get_name().to_string();
