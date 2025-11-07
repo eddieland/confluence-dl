@@ -219,6 +219,93 @@ fn convert_layout_to_markdown(layout: Node, options: &MarkdownOptions) -> String
   render_markdown_table(table_rows, options.compact_tables).unwrap_or_else(|| convert_layout_section(layout, options))
 }
 
+fn render_styled_span(node: Node, options: &MarkdownOptions) -> Option<String> {
+  let style = collect_span_color_styles(node)?;
+
+  let mut content = String::new();
+  for child in node.children() {
+    match child.node_type() {
+      roxmltree::NodeType::Text => {
+        if let Some(text) = child.text() {
+          content.push_str(&decode_html_entities(text));
+        }
+      }
+      _ => content.push_str(&convert_node_to_markdown(child, options)),
+    }
+  }
+
+  if content.trim().is_empty() {
+    return None;
+  }
+
+  Some(format!("<span style=\"{style}\">{content}</span>"))
+}
+
+fn collect_span_color_styles(node: Node) -> Option<String> {
+  let color = extract_style_color(node)
+    .or_else(|| get_attribute(node, "data-color").and_then(|value| sanitize_css_value(&value)));
+
+  let background = extract_style_background(node)
+    .or_else(|| get_attribute(node, "data-background-color").and_then(|value| sanitize_css_value(&value)));
+
+  if color.is_none() && background.is_none() {
+    return None;
+  }
+
+  let mut declarations = Vec::new();
+  if let Some(color) = color {
+    declarations.push(format!("color: {color}"));
+  }
+  if let Some(background) = background {
+    declarations.push(format!("background-color: {background}"));
+  }
+
+  Some(declarations.join("; "))
+}
+
+fn extract_style_color(node: Node) -> Option<String> {
+  get_attribute(node, "style").and_then(|style| extract_style_property(&style, "color"))
+}
+
+fn extract_style_background(node: Node) -> Option<String> {
+  get_attribute(node, "style").and_then(|style| extract_style_property(&style, "background-color"))
+}
+
+fn extract_style_property(style_attr: &str, property: &str) -> Option<String> {
+  style_attr.split(';').find_map(|declaration| {
+    let (name, value) = declaration.split_once(':')?;
+    if name.trim().eq_ignore_ascii_case(property) {
+      sanitize_css_value(value)
+    } else {
+      None
+    }
+  })
+}
+
+fn sanitize_css_value(raw_value: &str) -> Option<String> {
+  let trimmed = raw_value.trim();
+  if trimmed.is_empty() {
+    return None;
+  }
+
+  let without_important = trimmed
+    .strip_suffix("!important")
+    .map(|value| value.trim_end())
+    .unwrap_or(trimmed);
+
+  if without_important.is_empty() {
+    return None;
+  }
+
+  if without_important.chars().all(|ch| {
+    ch.is_ascii_alphanumeric() || matches!(ch, '#' | '(' | ')' | ',' | '.' | ' ' | '/' | '%' | '-' | '+' | '\'')
+  }) {
+    Some(without_important.to_string())
+  } else {
+    None
+  }
+}
+
 /// Converts an element and its children to Markdown recursively.
 ///
 /// # Arguments
@@ -386,6 +473,8 @@ pub fn convert_node_to_markdown(node: Node, options: &MarkdownOptions) -> String
           "span" => {
             if let Some(emoji) = convert_span_emoji(child) {
               result.push_str(&emoji);
+            } else if let Some(styled) = render_styled_span(child, options) {
+              result.push_str(&styled);
             } else {
               result.push_str(&convert_node_to_markdown(child, options));
             }
@@ -662,6 +751,36 @@ line</p>
     assert_eq!(
       output,
       "|               |                 |\n| ------------- | --------------- |\n| Pipe \\| Value | Multi<br />line |\n"
+    );
+  }
+
+  #[test]
+  fn test_span_color_style_is_preserved() {
+    let input = r#"<p><span style="color: rgb(97, 189, 109);">Green</span></p>"#;
+    let output = convert_to_markdown(input);
+    assert!(
+      output.contains(r#"<span style="color: rgb(97, 189, 109)">Green</span>"#),
+      "{output:?}"
+    );
+  }
+
+  #[test]
+  fn test_span_background_style_is_preserved() {
+    let input = r#"<p><span style="background-color: #ffeeaa;">Highlight</span></p>"#;
+    let output = convert_to_markdown(input);
+    assert!(
+      output.contains(r#"<span style="background-color: #ffeeaa">Highlight</span>"#),
+      "{output:?}"
+    );
+  }
+
+  #[test]
+  fn test_span_data_color_attributes_are_preserved() {
+    let input = r##"<p><span data-color="#ff0000" data-background-color="#ffeeee">Alert</span></p>"##;
+    let output = convert_to_markdown(input);
+    assert!(
+      output.contains(r#"<span style="color: #ff0000; background-color: #ffeeee">Alert</span>"#),
+      "{output:?}"
     );
   }
 }
