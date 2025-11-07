@@ -230,7 +230,8 @@ fn render_styled_span(node: Node, options: &MarkdownOptions) -> Option<String> {
           content.push_str(&decode_html_entities(text));
         }
       }
-      _ => content.push_str(&convert_element_node(child, options)),
+      roxmltree::NodeType::Element => content.push_str(&convert_element_node(child, options)),
+      _ => content.push_str(&convert_node_to_markdown(child, options)),
     }
   }
 
@@ -823,5 +824,12 @@ line</p>
       output.contains(r#"<span style="color: rgb(7, 71, 166)">~~a~~H<sub>2</sub>O<sup>+</sup></span>"#),
       "{output:?}"
     );
+  }
+
+  #[test]
+  fn test_styled_span_ignores_non_element_children() {
+    let input = r#"<p><span style="color: red;">Hi<!--note--></span></p>"#;
+    let output = convert_to_markdown(input);
+    assert!(output.contains(r#"<span style="color: red">Hi</span>"#), "{output:?}");
   }
 }
