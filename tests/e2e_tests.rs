@@ -11,6 +11,8 @@ use confluence_dl::confluence::ConfluenceApi;
 use confluence_dl::markdown::{self, MarkdownOptions};
 use insta::assert_snapshot;
 
+const DEMO_RAW_XML: &str = include_str!("./resources/demo_raw_export.xml");
+
 fn render_markdown(storage_content: &str) -> String {
   markdown::storage_to_markdown_with_options(storage_content, &MarkdownOptions::default()).unwrap()
 }
@@ -708,6 +710,15 @@ async fn test_convert_page_with_internal_links_to_markdown() {
 
   // Convert to markdown
   let markdown = render_markdown(storage_content);
+
+  assert_snapshot!(markdown);
+}
+
+#[test]
+fn test_convert_demo_raw_export_to_markdown() {
+  // Use the checked-in raw storage export directly to verify high-fidelity
+  // Markdown conversion.
+  let markdown = render_markdown(DEMO_RAW_XML);
 
   assert_snapshot!(markdown);
 }

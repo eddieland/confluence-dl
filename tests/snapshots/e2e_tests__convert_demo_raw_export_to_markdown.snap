@@ -1,0 +1,79 @@
+---
+source: tests/e2e_tests.rs
+expression: markdown
+---
+How about some **<span style="color: rgb(255,153,31)">te</span><span style="background-color: rgb(211,241,167)">xt</span>** _<span style="color: rgb(255,86,48)">form</span><span style="color: rgb(7,71,166)">atting</span>_?
+
+1 < 2
+
+2 > 1
+
+❤
+
+<3
+
+- My list
+
+  - Of lists
+
+    - Of lists
+
+      - For listing things
+
+1. Sometimes
+
+   1. We number them
+
+      1. Oh those are letters?
+
+         1. LMAO roman numerals now
+
+```py
+def main() -> None:
+  print("Hello, World!")
+```
+
+<details>
+<summary>Expand title</summary>
+
+```py
+def main() -> None:
+  print("I'm code in an expand!")
+```
+</details>
+
+> **Info:** This is Info.
+>
+> Next line.
+>
+> Emoji 🥲
+
+> **Note:** This is Note.
+>
+> Next line.
+
+> **Tip:** This is Success.
+>
+> Next line.
+
+> **Note:** This is Warning.
+>
+> Next line.
+
+> **Warning:** This is Error.
+>
+> Next line.
+
+> **Excerpt:** Visible excerpt.
+
+| Column 1 | 2   | 3   |
+| -------- | --- | --- |
+| Foo      | Bar | Baz |
+| Bat      | Man |     |
+| 🥲       | 🦇  | 👨  |
+
+![A1119440-419B-4D43-9001-6D099F6DFA1D.jpg](A1119440-419B-4D43-9001-6D099F6DFA1D.jpg)
+
+> “Eddie rocks”
+>
+> - Dan
