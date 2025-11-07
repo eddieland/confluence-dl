@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::Arc;
 
@@ -173,6 +173,19 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
     .map(|s| s.value.as_str())
     .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
 
+  let filename = sanitize_filename(&page.title);
+
+  if cli.output.save_raw {
+    let raw_output_path = write_raw_storage(Path::new(&cli.output.output), &filename, storage_content)?;
+    if cli.behavior.verbose > 0 {
+      println!(
+        "  {} {}",
+        colors.dimmed("→"),
+        colors.dimmed(format!("Raw: {}", raw_output_path.display()))
+      );
+    }
+  }
+
   if cli.behavior.verbose > 0 {
     println!(
       "  {}: {} characters",
@@ -283,8 +296,6 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
     )
   })?;
 
-  // Generate filename from page title
-  let filename = sanitize_filename(&page.title);
   let output_path = Path::new(&cli.output.output).join(format!("{filename}.md"));
 
   // Check if file exists and handle overwrite
@@ -367,13 +378,7 @@ fn download_page_tree<'a>(
     // Save raw Confluence storage format BEFORE parsing if requested
     // This ensures we can debug parse failures
     if cli.output.save_raw {
-      let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
-      if let Some(parent) = raw_output_path.parent() {
-        fs::create_dir_all(parent)
-          .with_context(|| format!("Failed to create directory for raw storage at {}", parent.display()))?;
-      }
-      fs::write(&raw_output_path, storage_content)
-        .with_context(|| format!("Failed to write raw storage to {}", raw_output_path.display()))?;
+      let raw_output_path = write_raw_storage(output_dir, &filename, storage_content)?;
 
       if cli.behavior.verbose > 0 {
         println!(
@@ -499,6 +504,20 @@ fn download_page_tree<'a>(
 
     Ok(())
   })
+}
+
+/// Persist the raw Confluence storage payload next to the Markdown export.
+fn write_raw_storage(output_dir: &Path, filename: &str, storage_content: &str) -> anyhow::Result<PathBuf> {
+  let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
+  if let Some(parent) = raw_output_path.parent() {
+    fs::create_dir_all(parent)
+      .with_context(|| format!("Failed to create directory for raw storage at {}", parent.display()))?;
+  }
+
+  fs::write(&raw_output_path, storage_content)
+    .with_context(|| format!("Failed to write raw storage to {}", raw_output_path.display()))?;
+
+  Ok(raw_output_path)
 }
 
 /// Build the Markdown conversion options from the CLI settings.
@@ -683,6 +702,89 @@ mod tests {
       children,
       depth: 0,
     }
+  }
+
+  #[test]
+  fn write_raw_storage_creates_file_with_content() {
+    let temp_dir = tempdir().unwrap();
+    let nested_dir = temp_dir.path().join("raw").join("pages");
+    let content = "<p>Example</p>";
+
+    let saved_path = write_raw_storage(&nested_dir, "Example Page", content).expect("raw storage should be saved");
+
+    assert_eq!(
+      saved_path,
+      nested_dir.join("Example Page.raw.xml"),
+      "raw output path should live under the provided directory"
+    );
+    assert_eq!(fs::read_to_string(&saved_path).unwrap(), content);
+  }
+
+  #[tokio::test]
+  async fn download_page_tree_writes_raw_storage_when_enabled() {
+    let temp_dir = tempdir().unwrap();
+    let output_dir = temp_dir.path();
+
+    let counter = Arc::new(Mutex::new(0));
+    let max_counter = Arc::new(Mutex::new(0));
+    let client = CountingClient::new(
+      Arc::clone(&counter),
+      Arc::clone(&max_counter),
+      Duration::from_millis(10),
+    );
+
+    let tree = PageTree {
+      page: make_page("root", "Root Page"),
+      children: Vec::new(),
+      depth: 0,
+    };
+
+    let colors = ColorScheme::new(ColorOption::Never);
+    let cli = Cli {
+      page_input: None,
+      command: None,
+      auth: AuthOptions {
+        url: None,
+        user: None,
+        token: None,
+      },
+      output: OutputOptions {
+        output: output_dir.to_string_lossy().to_string(),
+        overwrite: true,
+        save_raw: true,
+        compact_tables: false,
+      },
+      behavior: BehaviorOptions {
+        dry_run: false,
+        verbose: 0,
+        quiet: true,
+        color: ColorOption::Never,
+      },
+      page: PageOptions {
+        children: true,
+        max_depth: None,
+        attachments: false,
+      },
+      images_links: ImagesLinksOptions {
+        download_images: false,
+        images_dir: "images".to_string(),
+        preserve_anchors: false,
+      },
+      performance: PerformanceOptions {
+        parallel: 2,
+        rate_limit: 10,
+        timeout: 30,
+      },
+    };
+
+    let semaphore = Arc::new(Semaphore::new(cli.performance.resolved_parallel()));
+    download_page_tree(&client, &tree, output_dir, &cli, &colors, semaphore)
+      .await
+      .expect("download should succeed");
+
+    let raw_file = output_dir.join("Root Page.raw.xml");
+    assert!(raw_file.exists(), "raw storage file should be created");
+    assert_eq!(fs::read_to_string(&raw_file).unwrap(), "<p>Example</p>");
   }
 
   #[tokio::test]
