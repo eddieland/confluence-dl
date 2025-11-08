@@ -42,6 +42,16 @@ Confluence exposes hundreds of macros and HTML features. Supporting every combin
 
 When the parser meets a structure it cannot understand, it either falls back to the raw text or to a neutral blockquote with a short prefix, making the missing context obvious without breaking the document.
 
+## Extending the Parser for New Content Types
+
+Adding support for a new macro, inline element, or block usually follows the same path:
+
+1. Export a representative page with `--save-raw` enabled so the original storage-format XML lands beside the Markdown output. The saved payload makes it easy to inspect namespaces, nested elements, and attributes without re-running a network trace.
+2. Identify the minimal DOM fragment that represents the structure and add a focused helper inside `elements`, `tables`, `macros`, or a new module as appropriate. Keep the function small and deterministic so it composes well with the existing depth-first traversal.
+3. Write or update snapshot tests that exercise the new helper. Our `insta`-based snapshots double as "goldens"—once the Markdown output looks right, record it and let the snapshot guard against regressions as more cases are added.
+
+Running with `--save-raw` remains useful even after landing the implementation; it lets you diff Confluence payloads when someone reports a regression. Snapshot tests provide the other half of the feedback loop: they make it trivial to lock down expected Markdown for tricky XML combinations, and updating them is a deliberate action via `make update-snapshots`.
+
 ## Limitations
 
 - Complex layout macros such as multi-column sections flatten into sequential blocks, which means carefully arranged dashboards lose their grid structure.
