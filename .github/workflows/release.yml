@@ -172,7 +172,6 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-musl-${{ hashFiles('**/Cargo.lock') }}
-          target-dir: target
 
       - name: Build static binary
         env:
