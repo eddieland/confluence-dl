@@ -109,7 +109,7 @@ jobs:
       - name: Run tests
         run: cargo nextest run --workspace
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: confluence-dl-${{ matrix.os }}
           path: target/debug/confluence-dl
