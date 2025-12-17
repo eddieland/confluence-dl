@@ -112,13 +112,13 @@ jobs:
           echo "PREVIOUS_TAG=${PREVIOUS_TAG#v}" >>$GITHUB_ENV
 
       - name: Download Linux artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: confluence-dl-linux
           path: ./
 
       - name: Download macOS artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: confluence-dl-macos
           path: ./
