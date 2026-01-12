@@ -26,7 +26,7 @@ unicode-width = "0.2.2"
 url = "2.5.8"
 
 [dev-dependencies]
-insta = "1.44.3"
+insta = "1.46.0"
 tempfile = "3.23.0"
 
 [lib]
