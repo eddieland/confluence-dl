@@ -13,7 +13,7 @@
   - CLI parsing (`cli.rs`), color utilities (`color.rs`), Markdown conversion (`markdown/`).
   - Confluence integration (`confluence/`): async HTTP client, API trait, models, and tree traversal helpers.
   - Asset handling (`attachments.rs`, `images.rs`) and credential discovery (`credentials/`).
-  - Command handlers in `src/commands/` encapsulate `auth`, `completions`, `ls`, `page`, and `version` workflows.
+  - Command handlers in `src/commands/` encapsulate `auth`, `completions`, `ls`, `page`, `tui`, and `version` workflows.
 - Project scaffolding (`Cargo.toml`, `build.rs`, `Makefile`, toolchain configs) sits at the repo root.
 
 ### Build System

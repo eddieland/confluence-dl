@@ -15,10 +15,11 @@ use crate::commands::auth::{AuthCommand, handle_auth_command};
 use crate::commands::completions::{Shell, handle_completions_command};
 use crate::commands::ls::handle_ls_command;
 use crate::commands::page::handle_page_download;
+use crate::commands::tui::handle_tui_command;
 use crate::commands::version::handle_version_command;
 
 /// confluence-dl - Export Confluence pages to Markdown
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 #[command(
   name = "confluence-dl",
   version,
@@ -62,7 +63,7 @@ pub struct Cli {
 }
 
 /// Subcommands for debugging and introspection
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Subcommand, Clone)]
 pub enum Command {
   /// Print the Confluence page tree without downloading content
   Ls {
@@ -98,6 +99,17 @@ pub enum Command {
     #[arg(value_enum)]
     shell: Shell,
   },
+
+  /// Launch an experimental TUI to browse and download pages
+  Tui {
+    /// Page URL or numeric page ID used as the browsing root
+    #[arg(value_name = "PAGE_URL_OR_ID")]
+    target: String,
+
+    /// Maximum depth when building the browsing tree
+    #[arg(long, default_value = "2", value_name = "N")]
+    max_depth: usize,
+  },
 }
 
 /// Authentication subcommands
@@ -126,7 +138,7 @@ fn normalize_url(url: &str) -> Result<String, String> {
 }
 
 /// Authentication options
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 pub struct AuthOptions {
   /// Confluence base URL
   #[arg(long, env = "CONFLUENCE_URL", value_name = "URL", value_parser = normalize_url)]
@@ -142,7 +154,7 @@ pub struct AuthOptions {
 }
 
 /// Output options
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 pub struct OutputOptions {
   /// Output directory
   #[arg(short, long, default_value = "./confluence-export", value_name = "DIR")]
@@ -162,7 +174,7 @@ pub struct OutputOptions {
 }
 
 /// Behavior options
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 pub struct BehaviorOptions {
   /// Show what would be downloaded without actually downloading
   #[arg(long)]
@@ -190,7 +202,7 @@ pub enum ColorOption {
 }
 
 /// Page-specific options
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 pub struct PageOptions {
   /// Download child pages recursively
   #[arg(short = 'r', long, alias = "recursive")]
@@ -206,7 +218,7 @@ pub struct PageOptions {
 }
 
 /// Image and link options
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 pub struct ImagesLinksOptions {
   /// Download embedded images
   #[arg(
@@ -228,7 +240,7 @@ pub struct ImagesLinksOptions {
 }
 
 /// Performance options
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 pub struct PerformanceOptions {
   /// Number of parallel downloads (`-1` uses available cores)
   #[arg(long, default_value = "4", value_name = "N", allow_negative_numbers = true)]
@@ -345,6 +357,9 @@ pub async fn run() {
       }
       Command::Completions { shell } => {
         handle_completions_command(*shell);
+      }
+      Command::Tui { target, max_depth } => {
+        handle_tui_command(target, *max_depth, &cli, &colors).await;
       }
     }
     return;

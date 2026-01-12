@@ -16,7 +16,7 @@ use crate::confluence::{self, ConfluenceApi};
 use crate::credentials::{CredentialsProvider, NetrcProvider};
 
 /// Authentication subcommands exposed under `confluence-dl auth`.
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Subcommand, Clone)]
 pub enum AuthCommand {
   /// Test authentication credentials against the Confluence API.
   Test,
