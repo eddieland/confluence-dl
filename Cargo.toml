@@ -12,7 +12,7 @@ async-trait = "0.1.89"
 base64 = "0.22.1"
 chrono = "0.4.42"
 clap = { version = "4.5.54", features = ["derive", "env", "color"] }
-clap_complete = "4.5.64"
+clap_complete = "4.5.65"
 futures = "0.3.31"
 owo-colors = { version = "4.2.3", features = ["supports-colors"] }
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
@@ -23,7 +23,7 @@ tokio = { version = "1.49.0", features = ["fs", "macros", "rt-multi-thread", "sy
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
 unicode-width = "0.2.2"
-url = "2.5.7"
+url = "2.5.8"
 
 [dev-dependencies]
 insta = "1.44.3"
