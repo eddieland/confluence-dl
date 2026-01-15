@@ -39,11 +39,13 @@ make release            # Build optimized binary
 
 ### Testing Strategy
 
-**⚠️ CRITICAL: This project ONLY supports `cargo nextest` for running tests. Standard `cargo test` is NOT supported and should NOT be used.**
+**⛔ NEVER USE `cargo test` ⛔**
+
+This project ONLY supports `cargo nextest run`. The standard `cargo test` command is explicitly unsupported and will not work correctly with our test infrastructure.
 
 - **Test Runner**: [`cargo-nextest`](Makefile:27) is the ONLY supported test runner
-  - `cargo nextest` is faster, more reliable, and better integrated with our tooling
-  - Do NOT use `cargo test` - it is explicitly not supported in this project
+  - Always use `make test` or `cargo nextest run`
+  - NEVER use `cargo test` under any circumstances
 - **Test Location**: Tests live alongside implementation (unit tests) or in `tests/` (integration tests)
 - **Snapshot Testing**: Uses [`insta`](Makefile:51-64) for snapshot testing
   - Update snapshots: `make update-snapshots` or `INSTA_UPDATE=1 cargo nextest run`
@@ -245,7 +247,7 @@ When adding new output:
 
 ## Tips for AI Agents
 
-1. **Always use `cargo nextest run`**, never `cargo test` - see Testing Strategy section
+1. **⛔ NEVER use `cargo test`** - Always use `make test` or `cargo nextest run`. This is non-negotiable.
 2. **Run `make fmt` after ANY Rust code changes** - This applies rustfmt and clippy auto-fixes to ensure code consistency with project standards. Never skip this step, even for small changes.
 3. **Run `make all`** (fmt + lint + test) before suggesting changes are complete
 4. **Write descriptive Rustdocs** - document every non-trivial function, method, or public type with meaningful Rustdoc comments. Focus on the "why" as well as the "what", and include sections like `# Arguments`, `# Returns`, and `# Errors` when they clarify usage.
