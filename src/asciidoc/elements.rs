@@ -367,15 +367,17 @@ fn convert_image_to_asciidoc(node: Node) -> String {
 
   // Try ri:url first
   if let Some(url_node) = node.children().find(|child| matches_tag(*child, "ri:url"))
-    && let Some(src) = get_attribute(url_node, "ri:value") {
-      return format!("image::{src}[{alt}]");
-    }
+    && let Some(src) = get_attribute(url_node, "ri:value")
+  {
+    return format!("image::{src}[{alt}]");
+  }
 
   // Try ri:attachment
   if let Some(attachment_node) = node.children().find(|child| matches_tag(*child, "ri:attachment"))
-    && let Some(filename) = get_attribute(attachment_node, "ri:filename") {
-      return format!("image::{filename}[{alt}]");
-    }
+    && let Some(filename) = get_attribute(attachment_node, "ri:filename")
+  {
+    return format!("image::{filename}[{alt}]");
+  }
 
   // Fallback - return empty if no source found
   String::new()
