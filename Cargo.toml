@@ -27,7 +27,7 @@ url = "2.5.8"
 
 [dev-dependencies]
 insta = "1.46.0"
-tempfile = "3.23.0"
+tempfile = "3.24.0"
 
 [lib]
 name = "confluence_dl"
