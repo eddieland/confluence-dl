@@ -265,7 +265,10 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
       downloaded_image_filenames.extend(filename_map.keys().cloned());
 
       // Update output links to reference local files
-      output_content = images::update_markdown_image_links(&output_content, &filename_map);
+      output_content = match cli.output.format {
+        OutputFormat::Markdown => images::update_markdown_image_links(&output_content, &filename_map),
+        OutputFormat::AsciiDoc => images::update_asciidoc_image_links(&output_content, &filename_map),
+      };
     } else {
       println!("  {}", colors.dimmed("No images found in page"));
     }
@@ -442,7 +445,10 @@ fn download_page_tree<'a>(
 
         downloaded_image_filenames.extend(filename_map.keys().cloned());
 
-        output_content = images::update_markdown_image_links(&output_content, &filename_map);
+        output_content = match cli.output.format {
+          OutputFormat::Markdown => images::update_markdown_image_links(&output_content, &filename_map),
+          OutputFormat::AsciiDoc => images::update_asciidoc_image_links(&output_content, &filename_map),
+        };
       }
     }
 

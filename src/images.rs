@@ -363,6 +363,69 @@ pub fn update_markdown_image_links(markdown: &str, filename_map: &HashMap<String
   result
 }
 
+/// Updates AsciiDoc image links to reference locally downloaded files.
+///
+/// Handles the AsciiDoc image macro syntax `image::filename[alt]` and replaces
+/// the filename portion with the local filesystem path.
+///
+/// # Arguments
+/// * `asciidoc` - Existing AsciiDoc content containing image references.
+/// * `filename_map` - Mapping from attachment filenames to relative paths.
+///
+/// # Returns
+/// A new AsciiDoc string with image paths replaced by local filesystem paths.
+pub fn update_asciidoc_image_links(asciidoc: &str, filename_map: &HashMap<String, PathBuf>) -> String {
+  let mut result = asciidoc.to_string();
+
+  for (original_filename, local_path) in filename_map {
+    // Convert local path to forward slashes for cross-platform compatibility
+    let local_path_str = local_path.to_str().unwrap_or("").replace('\\', "/");
+
+    // AsciiDoc block image syntax: image::filename[alt text]
+    let block_pattern = format!("image::{original_filename}[");
+    let block_replacement = format!("image::{local_path_str}[");
+    result = result.replace(&block_pattern, &block_replacement);
+
+    // AsciiDoc inline image syntax: image:filename[alt text] (single colon)
+    // Be careful not to match the block image pattern we just replaced
+    let inline_pattern = format!("image:{original_filename}[");
+    let inline_replacement = format!("image:{local_path_str}[");
+    // Only replace if not preceded by another colon (which would be block syntax)
+    result = replace_non_block_image(&result, &inline_pattern, &inline_replacement);
+  }
+
+  result
+}
+
+/// Replaces inline image patterns while avoiding block image patterns.
+///
+/// AsciiDoc uses `image::path[alt]` for block images and `image:path[alt]` for
+/// inline images. This function ensures we only replace inline patterns that
+/// aren't part of a block image.
+fn replace_non_block_image(content: &str, pattern: &str, replacement: &str) -> String {
+  let mut result = String::with_capacity(content.len());
+  let mut remaining = content;
+
+  while let Some(pos) = remaining.find(pattern) {
+    // Check if preceded by a colon (which would make it part of "image::")
+    let is_block_image = pos > 0 && remaining.as_bytes().get(pos - 1) == Some(&b':');
+
+    if is_block_image {
+      // This is part of a block image, keep as-is and continue searching
+      result.push_str(&remaining[..pos + pattern.len()]);
+      remaining = &remaining[pos + pattern.len()..];
+    } else {
+      // This is an inline image, replace it
+      result.push_str(&remaining[..pos]);
+      result.push_str(replacement);
+      remaining = &remaining[pos + pattern.len()..];
+    }
+  }
+
+  result.push_str(remaining);
+  result
+}
+
 /// Sanitizes a filename for safe filesystem storage.
 ///
 /// Removes or replaces characters that might cause issues on various
@@ -468,5 +531,50 @@ mod tests {
     let map = HashMap::new();
     let result = update_markdown_image_links(markdown, &map);
     assert_eq!(result, markdown);
+  }
+
+  #[test]
+  fn test_update_asciidoc_image_links_block() {
+    let asciidoc = "image::architecture-diagram.png[diagram]\nimage::photo.jpg[photo]";
+    let mut map = HashMap::new();
+    map.insert(
+      "architecture-diagram.png".to_string(),
+      PathBuf::from("images/architecture-diagram.png"),
+    );
+    map.insert("photo.jpg".to_string(), PathBuf::from("images/photo.jpg"));
+
+    let result = update_asciidoc_image_links(asciidoc, &map);
+    assert!(result.contains("image::images/architecture-diagram.png[diagram]"));
+    assert!(result.contains("image::images/photo.jpg[photo]"));
+  }
+
+  #[test]
+  fn test_update_asciidoc_image_links_inline() {
+    let asciidoc = "Some text with image:diagram.png[a diagram] inline.";
+    let mut map = HashMap::new();
+    map.insert("diagram.png".to_string(), PathBuf::from("images/diagram.png"));
+
+    let result = update_asciidoc_image_links(asciidoc, &map);
+    assert!(result.contains("image:images/diagram.png[a diagram]"));
+    assert!(!result.contains("image::images/diagram.png")); // Should not become block image
+  }
+
+  #[test]
+  fn test_update_asciidoc_image_links_mixed() {
+    let asciidoc = "Block:\n\nimage::photo.png[alt]\n\nInline: image:photo.png[alt] in text";
+    let mut map = HashMap::new();
+    map.insert("photo.png".to_string(), PathBuf::from("images/photo.png"));
+
+    let result = update_asciidoc_image_links(asciidoc, &map);
+    assert!(result.contains("image::images/photo.png[alt]"));
+    assert!(result.contains("image:images/photo.png[alt]"));
+  }
+
+  #[test]
+  fn test_update_asciidoc_no_images() {
+    let asciidoc = "Just some text without images";
+    let map = HashMap::new();
+    let result = update_asciidoc_image_links(asciidoc, &map);
+    assert_eq!(result, asciidoc);
   }
 }
