@@ -34,10 +34,10 @@ use tracing::{debug, error, trace};
 // Module declarations
 mod elements;
 mod emoji;
-mod html_entities;
+pub mod html_entities;
 mod macros;
 mod tables;
-mod utils;
+pub mod utils;
 
 // Public API - re-export main conversion function
 pub use elements::convert_node_to_markdown;

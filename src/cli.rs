@@ -16,6 +16,7 @@ use crate::commands::completions::{Shell, handle_completions_command};
 use crate::commands::ls::handle_ls_command;
 use crate::commands::page::handle_page_download;
 use crate::commands::version::handle_version_command;
+use crate::format::OutputFormat;
 
 /// confluence-dl - Export Confluence pages to Markdown
 #[derive(Debug, Parser)]
@@ -152,13 +153,17 @@ pub struct OutputOptions {
   #[arg(long)]
   pub overwrite: bool,
 
-  /// Save raw Confluence storage format alongside Markdown
+  /// Save raw Confluence storage format alongside converted output
   #[arg(long)]
   pub save_raw: bool,
 
-  /// Render Markdown tables without padding columns for alignment
+  /// Render tables without padding columns for alignment
   #[arg(long)]
   pub compact_tables: bool,
+
+  /// Output format
+  #[arg(long, short = 'F', default_value = "markdown", value_name = "FORMAT")]
+  pub format: OutputFormat,
 }
 
 /// Behavior options
@@ -412,6 +417,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -460,6 +466,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -508,6 +515,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -552,6 +560,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -596,6 +605,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -638,6 +648,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -697,6 +708,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -743,6 +755,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -786,6 +799,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -829,6 +843,7 @@ mod tests {
         overwrite: false,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,

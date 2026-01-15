@@ -15,10 +15,12 @@ use anyhow::Context;
 use futures::future::join_all;
 use tokio::sync::Semaphore;
 
+use crate::asciidoc::{self, AsciiDocOptions};
 use crate::cli::Cli;
 use crate::color::ColorScheme;
 use crate::commands::auth::load_credentials;
 use crate::confluence::{self, ConfluenceApi};
+use crate::format::OutputFormat;
 use crate::markdown::{self, MarkdownOptions};
 use crate::{attachments, images};
 
@@ -194,16 +196,33 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
     );
   }
 
-  // Convert to Markdown
-  println!("\n{} {}", colors.info("→"), colors.info("Converting to Markdown"));
-  let options = build_markdown_options(cli);
-  let mut markdown = markdown::storage_to_markdown_with_options(storage_content, &options)?;
+  // Convert to target format
+  let format_name = match cli.output.format {
+    OutputFormat::Markdown => "Markdown",
+    OutputFormat::AsciiDoc => "AsciiDoc",
+  };
+  println!(
+    "\n{} {}",
+    colors.info("→"),
+    colors.info(format!("Converting to {format_name}"))
+  );
+
+  let mut output_content = match cli.output.format {
+    OutputFormat::Markdown => {
+      let options = build_markdown_options(cli);
+      markdown::storage_to_markdown_with_options(storage_content, &options)?
+    }
+    OutputFormat::AsciiDoc => {
+      let options = build_asciidoc_options(cli);
+      asciidoc::storage_to_asciidoc_with_options(storage_content, &options)?
+    }
+  };
 
   if cli.behavior.verbose > 0 {
     println!(
       "  {}: {} characters",
-      colors.dimmed("Markdown size"),
-      colors.number(markdown.len())
+      colors.dimmed(format!("{format_name} size")),
+      colors.number(output_content.len())
     );
   }
 
@@ -245,8 +264,8 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
 
       downloaded_image_filenames.extend(filename_map.keys().cloned());
 
-      // Update markdown links to reference local files
-      markdown = images::update_markdown_image_links(&markdown, &filename_map);
+      // Update output links to reference local files
+      output_content = images::update_markdown_image_links(&output_content, &filename_map);
     } else {
       println!("  {}", colors.dimmed("No images found in page"));
     }
@@ -284,7 +303,7 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
         }
       );
 
-      markdown = attachments::update_markdown_attachment_links(&markdown, &downloaded_attachments);
+      output_content = attachments::update_markdown_attachment_links(&output_content, &downloaded_attachments);
     }
   }
 
@@ -296,7 +315,8 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
     )
   })?;
 
-  let output_path = Path::new(&cli.output.output).join(format!("{filename}.md"));
+  let extension = cli.output.format.file_extension();
+  let output_path = Path::new(&cli.output.output).join(format!("{filename}.{extension}"));
 
   // Check if file exists and handle overwrite
   if output_path.exists() && !cli.output.overwrite {
@@ -310,8 +330,8 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
   println!("\n{} {}", colors.info("→"), colors.info("Writing to disk"));
   println!("  {}: {}", colors.emphasis("File"), colors.path(output_path.display()));
 
-  fs::write(&output_path, markdown)
-    .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
+  fs::write(&output_path, output_content)
+    .with_context(|| format!("Failed to write {} to {}", format_name, output_path.display()))?;
 
   Ok(())
 }
@@ -389,10 +409,19 @@ fn download_page_tree<'a>(
       }
     }
 
-    // Convert to Markdown
-    let options = build_markdown_options(cli);
-    let mut markdown = markdown::storage_to_markdown_with_options(storage_content, &options)
-      .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?;
+    // Convert to target format
+    let mut output_content = match cli.output.format {
+      OutputFormat::Markdown => {
+        let options = build_markdown_options(cli);
+        markdown::storage_to_markdown_with_options(storage_content, &options)
+          .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?
+      }
+      OutputFormat::AsciiDoc => {
+        let options = build_asciidoc_options(cli);
+        asciidoc::storage_to_asciidoc_with_options(storage_content, &options)
+          .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to asciidoc: {}", page.title, e))?
+      }
+    };
 
     let mut downloaded_image_filenames = HashSet::new();
 
@@ -413,7 +442,7 @@ fn download_page_tree<'a>(
 
         downloaded_image_filenames.extend(filename_map.keys().cloned());
 
-        markdown = images::update_markdown_image_links(&markdown, &filename_map);
+        output_content = images::update_markdown_image_links(&output_content, &filename_map);
       }
     }
 
@@ -435,14 +464,15 @@ fn download_page_tree<'a>(
             colors.number(downloaded_attachments.len())
           );
         }
-        markdown = attachments::update_markdown_attachment_links(&markdown, &downloaded_attachments);
+        output_content = attachments::update_markdown_attachment_links(&output_content, &downloaded_attachments);
       } else if cli.behavior.verbose > 1 {
         println!("    {}", colors.dimmed("No attachments found"));
       }
     }
 
     // Generate output path
-    let output_path = output_dir.join(format!("{filename}.md"));
+    let extension = cli.output.format.file_extension();
+    let output_path = output_dir.join(format!("{filename}.{extension}"));
 
     // Create parent directory
     if let Some(parent) = output_path.parent() {
@@ -450,15 +480,15 @@ fn download_page_tree<'a>(
     }
 
     if cli.output.overwrite {
-      // Write markdown to file
-      fs::write(&output_path, &markdown)
-        .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
+      // Write output to file
+      fs::write(&output_path, &output_content)
+        .with_context(|| format!("Failed to write output to {}", output_path.display()))?;
     } else {
       match OpenOptions::new().write(true).create_new(true).open(&output_path) {
         Ok(mut file) => {
           file
-            .write_all(markdown.as_bytes())
-            .with_context(|| format!("Failed to write markdown to {}", output_path.display()))?;
+            .write_all(output_content.as_bytes())
+            .with_context(|| format!("Failed to write output to {}", output_path.display()))?;
         }
         Err(err) if err.kind() == ErrorKind::AlreadyExists => {
           let message = format!(
@@ -471,7 +501,7 @@ fn download_page_tree<'a>(
           anyhow::bail!(message);
         }
         Err(err) => {
-          anyhow::bail!("Failed to create markdown file {}: {}", output_path.display(), err);
+          anyhow::bail!("Failed to create output file {}: {}", output_path.display(), err);
         }
       }
     }
@@ -525,6 +555,16 @@ fn write_raw_storage(output_dir: &Path, filename: &str, storage_content: &str) -
 /// Currently propagates anchor preservation and compact table rendering flags.
 fn build_markdown_options(cli: &Cli) -> MarkdownOptions {
   MarkdownOptions {
+    preserve_anchors: cli.images_links.preserve_anchors,
+    compact_tables: cli.output.compact_tables,
+  }
+}
+
+/// Build the AsciiDoc conversion options from the CLI settings.
+///
+/// Currently propagates anchor preservation and compact table rendering flags.
+fn build_asciidoc_options(cli: &Cli) -> AsciiDocOptions {
+  AsciiDocOptions {
     preserve_anchors: cli.images_links.preserve_anchors,
     compact_tables: cli.output.compact_tables,
   }
@@ -753,6 +793,7 @@ mod tests {
         overwrite: true,
         save_raw: true,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
@@ -825,6 +866,7 @@ mod tests {
         overwrite: true,
         save_raw: false,
         compact_tables: false,
+        format: OutputFormat::Markdown,
       },
       behavior: BehaviorOptions {
         dry_run: false,
