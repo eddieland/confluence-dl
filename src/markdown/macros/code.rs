@@ -7,13 +7,10 @@ use crate::markdown::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_
 /// Renders Confluence code macros into fenced Markdown code blocks.
 ///
 /// # Arguments
-/// * `_macro_name` - Present for signature compatibility; only `"code"`
-///   variants reach here.
-/// * `element` - The `<ac:structured-macro>` node that contains code parameters
-///   and body.
+/// * `_macro_name` - Present for signature compatibility; only `"code"` variants reach here.
+/// * `element` - The `<ac:structured-macro>` node that contains code parameters and body.
 /// * `_convert_node` - Ignored callback because code bodies are plain text.
-/// * `_options` - Markdown conversion options (not currently used for code
-///   blocks).
+/// * `_options` - Markdown conversion options (not currently used for code blocks).
 ///
 /// # Returns
 /// Markdown fenced code block using the detected language when provided.
@@ -29,8 +26,7 @@ pub(super) fn handle_macro(
 /// Builds a fenced code block from a Confluence code macro element.
 ///
 /// # Arguments
-/// * `element` - The `<ac:structured-macro>` node containing `language`
-///   parameters and body text.
+/// * `element` - The `<ac:structured-macro>` node containing `language` parameters and body text.
 ///
 /// # Returns
 /// A fenced code block surrounded by blank lines, including the language hint

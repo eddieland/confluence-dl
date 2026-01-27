@@ -13,14 +13,11 @@ pub trait CredentialsProvider {
   /// Retrieves credentials for the specified host.
   ///
   /// # Arguments
-  /// * `host` - Hostname whose credentials should be resolved (e.g.,
-  ///   `example.atlassian.net`).
+  /// * `host` - Hostname whose credentials should be resolved (e.g., `example.atlassian.net`).
   ///
   /// # Returns
-  /// * `Ok(Some(Credential))` when the provider contains credentials for the
-  ///   host.
-  /// * `Ok(None)` when the provider has no entry for the host, allowing
-  ///   fallback providers to run.
+  /// * `Ok(Some(Credential))` when the provider contains credentials for the host.
+  /// * `Ok(None)` when the provider has no entry for the host, allowing fallback providers to run.
   ///
   /// # Errors
   /// Returns `Err(CredentialError)` when an unexpected failure occurs (for

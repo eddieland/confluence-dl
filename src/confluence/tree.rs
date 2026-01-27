@@ -46,8 +46,7 @@ pub async fn get_page_tree(client: &dyn ConfluenceApi, page_id: &str, max_depth:
 /// * `client` - API implementation used for fetching page data.
 /// * `page_id` - Current page being processed.
 /// * `current_depth` - Depth of the current page in the traversal.
-/// * `max_depth` - Optional maximum depth; `None` fetches until pages are
-///   exhausted.
+/// * `max_depth` - Optional maximum depth; `None` fetches until pages are exhausted.
 /// * `visited` - Set of page IDs already seen, used to detect cycles.
 ///
 /// # Returns
