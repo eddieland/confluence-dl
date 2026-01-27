@@ -9,10 +9,8 @@ use crate::markdown::utils::{find_child_by_tag_and_attr, get_element_text};
 ///
 /// # Arguments
 /// * `_macro_name` - Present for signature compatibility; not used.
-/// * `element` - The `<ac:structured-macro>` node that contains emoji
-///   parameters.
-/// * `_convert_node` - Unused callback since emoji macros have no inner
-///   content.
+/// * `element` - The `<ac:structured-macro>` node that contains emoji parameters.
+/// * `_convert_node` - Unused callback since emoji macros have no inner content.
 /// * `_options` - Markdown conversion options (unused for emoji rendering).
 ///
 /// # Returns

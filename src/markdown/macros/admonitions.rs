@@ -10,8 +10,7 @@ use crate::markdown::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_
 /// * `macro_name` - The macro name that determines the default heading label.
 /// * `element` - The `<ac:structured-macro>` node describing the admonition.
 /// * `convert_node` - Callback used to render the rich text body into Markdown.
-/// * `_options` - Conversion flags (currently unused; kept for signature
-///   parity).
+/// * `_options` - Conversion flags (currently unused; kept for signature parity).
 ///
 /// # Returns
 /// Markdown blockquote for the admonition with an emphasized heading.
@@ -52,8 +51,7 @@ fn resolve_heading(macro_name: &str, explicit_title: &str) -> String {
 ///
 /// # Arguments
 /// * `heading` - Title to display for the admonition.
-/// * `body` - Markdown body contents, expected to be trimmed and possibly
-///   multiline.
+/// * `body` - Markdown body contents, expected to be trimmed and possibly multiline.
 ///
 /// # Returns
 /// Markdown blockquote containing the heading and body lines.

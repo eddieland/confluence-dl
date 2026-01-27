@@ -6,8 +6,7 @@ use crate::markdown::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_
 /// Converts Confluence expand macros into HTML `<details>` elements.
 ///
 /// # Arguments
-/// * `_macro_name` - Included for signature parity; expand macros share the
-///   same handler.
+/// * `_macro_name` - Included for signature parity; expand macros share the same handler.
 /// * `element` - The `<ac:structured-macro>` node describing the expand block.
 /// * `convert_node` - Callback used to render the expand body into Markdown.
 /// * `_options` - Conversion options (unused for expand macros).
@@ -26,8 +25,7 @@ pub(super) fn handle_macro(
 /// Renders an expand macro to HTML, preserving title and body content.
 ///
 /// # Arguments
-/// * `element` - Expand macro node providing optional `title` and rich-text
-///   body.
+/// * `element` - Expand macro node providing optional `title` and rich-text body.
 /// * `convert_node` - Callback for producing Markdown from the body.
 ///
 /// # Returns

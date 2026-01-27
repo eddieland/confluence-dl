@@ -33,8 +33,7 @@ pub enum AuthCommand {
 ///
 /// # Arguments
 /// * `subcommand` - Auth-specific variant to execute.
-/// * `cli` - Parsed CLI settings containing authentication, output, and
-///   telemetry options.
+/// * `cli` - Parsed CLI settings containing authentication, output, and telemetry options.
 /// * `colors` - Shared color scheme used to render output consistently.
 pub async fn handle_auth_command(subcommand: &AuthCommand, cli: &Cli, colors: &ColorScheme) {
   match subcommand {

@@ -22,8 +22,7 @@ pub struct UrlInfo {
 /// - https://example.atlassian.net/pages/123456
 ///
 /// # Arguments
-/// * `url` - User-supplied Confluence URL that should resolve to a specific
-///   page.
+/// * `url` - User-supplied Confluence URL that should resolve to a specific page.
 ///
 /// # Returns
 /// Structured [`UrlInfo`] describing the base instance URL, page identifier,

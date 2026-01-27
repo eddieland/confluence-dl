@@ -152,12 +152,11 @@ impl ColorScheme {
 
 // Best Practices for Color Usage:
 //
-// 1. **Semantic Naming**: Use method names that describe the purpose (success,
-//    error) rather than the color itself (green, red). This makes the code more
-//    maintainable.
+// 1. **Semantic Naming**: Use method names that describe the purpose (success, error) rather than the color itself
+//    (green, red). This makes the code more maintainable.
 //
-// 2. **Consistency**: Always use the same color for the same type of message
-//    across the entire application. For example, errors are always bright red.
+// 2. **Consistency**: Always use the same color for the same type of message across the entire application. For
+//    example, errors are always bright red.
 //
 // 3. **Accessibility**: Consider colorblind users:
 //    - Never rely solely on color to convey information
@@ -169,12 +168,11 @@ impl ColorScheme {
 //    - always: Force colors (for piping to files that will be viewed later)
 //    - never: No colors (for CI/CD, logs, accessibility)
 //
-// 5. **Progressive Enhancement**: The application should work perfectly without
-//    colors. Colors are a visual enhancement, not a requirement.
+// 5. **Progressive Enhancement**: The application should work perfectly without colors. Colors are a visual
+//    enhancement, not a requirement.
 //
-// 6. **Terminal Compatibility**: Use standard ANSI colors that work across
-//    terminals. owo-colors handles this well with its supports-colors
-//    detection.
+// 6. **Terminal Compatibility**: Use standard ANSI colors that work across terminals. owo-colors handles this well with
+//    its supports-colors detection.
 //
 // 7. **Emotional Design**: Colors evoke emotions and set expectations:
 //    - Green = Success, positive, "go ahead"
@@ -189,12 +187,11 @@ impl ColorScheme {
 //    - Dimmed/gray for less important context
 //    - Underline for clickable/actionable items
 //
-// 9. **Cultural Considerations**: Be aware that color meanings can vary by
-//    culture, but the tech world has generally standardized on the conventions
-//    used here.
+// 9. **Cultural Considerations**: Be aware that color meanings can vary by culture, but the tech world has generally
+//    standardized on the conventions used here.
 //
-// 10. **Testing**: Always test your CLI in different terminals and with
-//     different color schemes (light/dark backgrounds) to ensure readability.
+// 10. **Testing**: Always test your CLI in different terminals and with different color schemes (light/dark
+//     backgrounds) to ensure readability.
 
 #[cfg(test)]
 mod tests {

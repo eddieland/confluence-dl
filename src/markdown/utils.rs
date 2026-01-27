@@ -181,8 +181,7 @@ pub fn qualified_tag_name(node: Node) -> String {
 ///
 /// # Arguments
 /// * `node` - The element to check.
-/// * `name` - The expected tag name, optionally including a prefix such as
-///   `ac:rich-text-body`.
+/// * `name` - The expected tag name, optionally including a prefix such as `ac:rich-text-body`.
 ///
 /// # Returns
 /// `true` when the element matches the supplied name and namespace, otherwise
@@ -211,8 +210,7 @@ pub fn matches_tag(node: Node, name: &str) -> bool {
 ///
 /// # Arguments
 /// * `node` - The element to inspect.
-/// * `attr_name` - The attribute to retrieve, optionally namespaced like
-///   `ri:filename`.
+/// * `attr_name` - The attribute to retrieve, optionally namespaced like `ri:filename`.
 ///
 /// # Returns
 /// `Some(String)` containing the attribute value when present, otherwise

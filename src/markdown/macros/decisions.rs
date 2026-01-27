@@ -11,14 +11,10 @@ use crate::markdown::utils::{
 /// Converts Confluence decision macros into descriptive Markdown blocks.
 ///
 /// # Arguments
-/// * `macro_name` - The specific decision macro variant (`decision`,
-///   `decision-list`, `decisionreport`).
-/// * `element` - The `<ac:structured-macro>` node containing decision metadata
-///   and body.
-/// * `convert_node` - Callback used to render nested rich text nodes into
-///   Markdown.
-/// * `_options` - Markdown rendering options (not currently used by decision
-///   macros).
+/// * `macro_name` - The specific decision macro variant (`decision`, `decision-list`, `decisionreport`).
+/// * `element` - The `<ac:structured-macro>` node containing decision metadata and body.
+/// * `convert_node` - Callback used to render nested rich text nodes into Markdown.
+/// * `_options` - Markdown rendering options (not currently used by decision macros).
 ///
 /// # Returns
 /// Markdown representation for the decision macro, or `None` when unhandled.
@@ -205,8 +201,7 @@ struct DecisionInfo {
 /// content.
 ///
 /// # Arguments
-/// * `element` - The `<ac:structured-macro>` node for `decisionreport`
-///   containing an optional CQL query.
+/// * `element` - The `<ac:structured-macro>` node for `decisionreport` containing an optional CQL query.
 ///
 /// # Returns
 /// Markdown note explaining that the dynamic content is not exported, with the
@@ -245,8 +240,7 @@ fn append_segment(target: &mut String, segment: &str) {
 ///
 /// # Arguments
 /// * `target` - Accumulator for inline decision metadata.
-/// * `segment` - Segment that should be appended while preserving inline
-///   readability.
+/// * `segment` - Segment that should be appended while preserving inline readability.
 fn append_inline_text(target: &mut String, segment: &str) {
   let trimmed = segment.trim();
   if trimmed.is_empty() {
@@ -263,8 +257,7 @@ fn append_inline_text(target: &mut String, segment: &str) {
 /// # Arguments
 /// * `element` - Decision macro element that may contain nested parameters.
 /// * `name` - Parameter name to locate (`title`, `status`, etc.).
-/// * `convert_node` - Callback used to render child elements into Markdown
-///   text.
+/// * `convert_node` - Callback used to render child elements into Markdown text.
 ///
 /// # Returns
 /// Trimmed string value for the parameter, or `None` if not present.
@@ -442,8 +435,7 @@ fn decision_info_has_content(info: &DecisionInfo) -> bool {
 ///
 /// # Arguments
 /// * `decisions` - Parsed decision entries to render in order.
-/// * `skip_empty` - When true, suppresses entries without titles or body
-///   content.
+/// * `skip_empty` - When true, suppresses entries without titles or body content.
 ///
 /// # Returns
 /// Markdown list separated by blank lines, or an empty string when nothing
@@ -507,8 +499,7 @@ fn format_decision(element: Node, convert_node: &dyn Fn(Node) -> String) -> Stri
 ///
 /// # Arguments
 /// * `element` - The decision list macro element containing a rich-text body.
-/// * `convert_node` - Callback used to render fallback content and nested
-///   bodies.
+/// * `convert_node` - Callback used to render fallback content and nested bodies.
 ///
 /// # Returns
 /// Markdown list of decisions or a fallback rendering when no structured
@@ -573,8 +564,7 @@ fn convert_adf_decision_list(element: Node) -> String {
 /// Parses a single ADF decision item node into `DecisionInfo`.
 ///
 /// # Arguments
-/// * `node` - The `<ac:adf-node type=\"decision-item\">` element describing the
-///   decision.
+/// * `node` - The `<ac:adf-node type=\"decision-item\">` element describing the decision.
 ///
 /// # Returns
 /// Populated `DecisionInfo` when content is meaningful, otherwise `None`.
@@ -743,8 +733,7 @@ fn collect_adf_paragraphs_from(node: Node, paragraphs: &mut Vec<String>) {
 /// Flattens inline ADF nodes into a normalized Markdown-friendly string.
 ///
 /// # Arguments
-/// * `node` - The inline node (e.g., paragraph) whose children should be
-///   flattened.
+/// * `node` - The inline node (e.g., paragraph) whose children should be flattened.
 ///
 /// # Returns
 /// Joined string with newlines preserved for hard breaks, or `None` when empty.

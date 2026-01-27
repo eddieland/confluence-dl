@@ -9,8 +9,7 @@ use crate::markdown::utils::{find_child_by_tag, find_child_by_tag_and_attr, get_
 /// # Arguments
 /// * `macro_name` - Name of the macro to dispatch (e.g., `"toc"`, `"panel"`).
 /// * `element` - The `<ac:structured-macro>` node containing macro content.
-/// * `convert_node` - Callback used for rendering nested rich text where
-///   needed.
+/// * `convert_node` - Callback used for rendering nested rich text where needed.
 /// * `_options` - Markdown rendering options (unused for these basic macros).
 ///
 /// # Returns
@@ -47,8 +46,7 @@ fn render_panel(element: Node, convert_node: &dyn Fn(Node) -> String) -> String 
 /// Renders the Confluence status macro into inline code-style Markdown.
 ///
 /// # Arguments
-/// * `element` - The `<ac:structured-macro>` node that may include a `title`
-///   parameter.
+/// * `element` - The `<ac:structured-macro>` node that may include a `title` parameter.
 ///
 /// # Returns
 /// Inline code span such as `` `[In Progress]` `` representing the status

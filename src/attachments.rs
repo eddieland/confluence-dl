@@ -32,8 +32,8 @@ pub struct DownloadedAttachment {
 /// * `page_id` - Identifier of the page whose attachments should be fetched.
 /// * `output_dir` - Directory where the Markdown file for the page is written.
 /// * `overwrite` - When `true`, existing files are replaced.
-/// * `skip_titles` - Optional set of attachment titles that should be skipped
-///   (typically image filenames already handled separately).
+/// * `skip_titles` - Optional set of attachment titles that should be skipped (typically image filenames already
+///   handled separately).
 pub async fn download_attachments(
   client: &dyn ConfluenceApi,
   page_id: &str,

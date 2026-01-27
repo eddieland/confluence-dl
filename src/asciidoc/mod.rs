@@ -38,8 +38,7 @@ pub struct AsciiDocOptions {
 ///
 /// # Arguments
 ///
-/// * `storage_content` - The Confluence storage format content (XHTML) to
-///   convert.
+/// * `storage_content` - The Confluence storage format content (XHTML) to convert.
 /// * `options` - Conversion behaviour flags that control optional features.
 ///
 /// # Returns

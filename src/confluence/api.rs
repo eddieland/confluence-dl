@@ -23,8 +23,7 @@ pub trait ConfluenceApi: Send + Sync {
   /// Get child pages for a given page ID.
   ///
   /// # Arguments
-  /// * `page_id` - Identifier of the parent page whose children should be
-  ///   listed.
+  /// * `page_id` - Identifier of the parent page whose children should be listed.
   ///
   /// # Returns
   /// A vector of `Page` records representing each direct child of the parent.
@@ -43,8 +42,7 @@ pub trait ConfluenceApi: Send + Sync {
   ///
   /// # Arguments
   /// * `url` - Direct or relative link to the attachment download endpoint.
-  /// * `output_path` - Filesystem location where the downloaded bytes should be
-  ///   written.
+  /// * `output_path` - Filesystem location where the downloaded bytes should be written.
   ///
   /// # Returns
   /// `Ok(())` on success, or an error detailing why the download failed.

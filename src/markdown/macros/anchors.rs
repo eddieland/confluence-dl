@@ -6,13 +6,10 @@ use crate::markdown::utils::{find_child_by_tag_and_attr, get_element_text};
 /// Converts Confluence anchor macros into optional HTML anchor tags.
 ///
 /// # Arguments
-/// * `_macro_name` - Present for signature compatibility; anchors do not branch
-///   on name.
-/// * `element` - The `<ac:structured-macro>` node that may contain an anchor
-///   parameter.
+/// * `_macro_name` - Present for signature compatibility; anchors do not branch on name.
+/// * `element` - The `<ac:structured-macro>` node that may contain an anchor parameter.
 /// * `_convert_node` - Unused callback retained to match handler signature.
-/// * `options` - Markdown conversion options indicating whether to keep
-///   anchors.
+/// * `options` - Markdown conversion options indicating whether to keep anchors.
 ///
 /// # Returns
 /// Empty string when anchors are suppressed, otherwise an HTML `<a id=\"...\">`

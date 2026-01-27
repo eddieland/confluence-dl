@@ -60,8 +60,7 @@ fn looks_like_list_marker(line: &str) -> bool {
 ///
 /// # Arguments
 /// * `item` - Converted Markdown representing the list item's body.
-/// * `prefix` - The list marker (e.g., `"- "` or `"1. "`) applied to the first
-///   visible line.
+/// * `prefix` - The list marker (e.g., `"- "` or `"1. "`) applied to the first visible line.
 ///
 /// # Returns
 /// Rendered Markdown snippet for the list item with normalized indentation.
@@ -551,8 +550,7 @@ fn convert_element_node(child: Node, options: &MarkdownOptions) -> String {
 ///
 /// # Arguments
 /// * `node` - Root node whose descendants should be rendered.
-/// * `options` - Conversion behaviour flags that control optional features,
-///   such as anchor preservation.
+/// * `options` - Conversion behaviour flags that control optional features, such as anchor preservation.
 ///
 /// # Returns
 /// A Markdown string representing the element and its descendants.
