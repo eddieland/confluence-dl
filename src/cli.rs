@@ -5,7 +5,7 @@
 
 use std::process;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum, ValueHint};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
 use url::Url;
@@ -29,7 +29,7 @@ use crate::format::OutputFormat;
 )]
 pub struct Cli {
   /// Page URL or numeric page ID to download
-  #[arg(value_name = "PAGE_URL_OR_ID")]
+  #[arg(value_name = "PAGE_URL_OR_ID", value_hint = ValueHint::Url)]
   pub page_input: Option<String>,
 
   /// Subcommand to execute
@@ -67,7 +67,7 @@ pub enum Command {
   /// Print the Confluence page tree without downloading content
   Ls {
     /// Page URL or numeric page ID whose descendants should be displayed
-    #[arg(value_name = "PAGE_URL_OR_ID")]
+    #[arg(value_name = "PAGE_URL_OR_ID", value_hint = ValueHint::Url)]
     target: String,
 
     /// Maximum depth when traversing children (0 lists only the root page)
@@ -122,11 +122,11 @@ fn normalize_url(url: &str) -> Result<String, String> {
 #[derive(Debug, Parser)]
 pub struct AuthOptions {
   /// Confluence base URL
-  #[arg(long, env = "CONFLUENCE_URL", value_name = "URL", value_parser = normalize_url)]
+  #[arg(long, env = "CONFLUENCE_URL", value_name = "URL", value_parser = normalize_url, value_hint = ValueHint::Url)]
   pub url: Option<String>,
 
   /// Confluence user email
-  #[arg(long, env = "CONFLUENCE_USER", value_name = "EMAIL")]
+  #[arg(long, env = "CONFLUENCE_USER", value_name = "EMAIL", value_hint = ValueHint::EmailAddress)]
   pub user: Option<String>,
 
   /// Confluence API token
@@ -138,7 +138,7 @@ pub struct AuthOptions {
 #[derive(Debug, Parser)]
 pub struct OutputOptions {
   /// Output directory
-  #[arg(short, long, default_value = "./confluence-export", value_name = "DIR")]
+  #[arg(short, long, default_value = "./confluence-export", value_name = "DIR", value_hint = ValueHint::DirPath)]
   pub output: String,
 
   /// Overwrite existing files
@@ -216,7 +216,7 @@ pub struct ImagesLinksOptions {
   pub download_images: bool,
 
   /// Directory for images (relative to output)
-  #[arg(long, default_value = "images", value_name = "DIR")]
+  #[arg(long, default_value = "images", value_name = "DIR", value_hint = ValueHint::DirPath)]
   pub images_dir: String,
 
   /// Keep Confluence anchor IDs
