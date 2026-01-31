@@ -94,6 +94,8 @@ pub enum Command {
   },
 
   /// Generate shell completion scripts
+  ///
+  /// Alternative: use `COMPLETE=bash confluence-dl` for dynamic completions
   Completions {
     /// Target shell for completions
     #[arg(value_enum)]
