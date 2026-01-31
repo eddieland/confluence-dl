@@ -119,18 +119,17 @@ confluence-dl 123456 \
 
 ### 🐚 "I want shell completions"
 
-Generate completion scripts for your shell:
+Enable dynamic completions by sourcing the output of `COMPLETE=<shell>`:
 
 ```bash
-# Bash (user-level, no sudo required)
-mkdir -p ~/.local/share/bash-completion/completions
-confluence-dl completions bash > ~/.local/share/bash-completion/completions/confluence-dl
+# Bash - add to ~/.bashrc
+source <(COMPLETE=bash confluence-dl)
 
-# Zsh
-confluence-dl completions zsh > ~/.zsh/completions/_confluence-dl
+# Zsh - add to ~/.zshrc
+source <(COMPLETE=zsh confluence-dl)
 
-# Fish
-confluence-dl completions fish > ~/.config/fish/completions/confluence-dl.fish
+# Fish - add to ~/.config/fish/config.fish
+COMPLETE=fish confluence-dl | source
 ```
 
 Supported shells: bash, zsh, fish, powershell, elvish
