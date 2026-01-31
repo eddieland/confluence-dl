@@ -12,7 +12,6 @@ use url::Url;
 
 use crate::color::ColorScheme;
 use crate::commands::auth::{AuthCommand, handle_auth_command};
-use crate::commands::completions::{Shell, handle_completions_command};
 use crate::commands::ls::handle_ls_command;
 use crate::commands::page::handle_page_download;
 use crate::commands::version::handle_version_command;
@@ -91,15 +90,6 @@ pub enum Command {
     /// Show only version number
     #[arg(long)]
     short: bool,
-  },
-
-  /// Generate shell completion scripts
-  ///
-  /// Alternative: use `COMPLETE=bash confluence-dl` for dynamic completions
-  Completions {
-    /// Target shell for completions
-    #[arg(value_enum)]
-    shell: Shell,
   },
 }
 
@@ -349,9 +339,6 @@ pub async fn run() {
       }
       Command::Version { json, short } => {
         handle_version_command(*json, *short, &colors);
-      }
-      Command::Completions { shell } => {
-        handle_completions_command(*shell);
       }
     }
     return;
