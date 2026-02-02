@@ -11,7 +11,7 @@ anyhow = "1.0.100"
 async-trait = "0.1.89"
 base64 = "0.22.1"
 chrono = "0.4.43"
-clap = { version = "4.5.54", features = ["derive", "env", "color"] }
+clap = { version = "4.5.56", features = ["derive", "env", "color"] }
 clap_complete = { version = "4.5.65", features = ["unstable-dynamic"] }
 futures = "0.3.31"
 owo-colors = { version = "4.2.3", features = ["supports-colors"] }
@@ -26,7 +26,7 @@ unicode-width = "0.2.2"
 url = "2.5.8"
 
 [dev-dependencies]
-insta = "1.46.1"
+insta = "1.46.2"
 tempfile = "3.24.0"
 
 [lib]
