@@ -212,7 +212,7 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
 
   // Process the page (API calls + conversion)
   // Note: save_raw=false since we've already saved it above
-  let mut process_options = build_process_options(cli);
+  let mut process_options = build_process_options(cli, output_dir);
   process_options.save_raw = false;
   let processed = process_page(&client, &page, &process_options).await?;
 
@@ -330,7 +330,7 @@ fn download_page_tree<'a>(
 
     // Process the page (API calls + conversion)
     // Note: save_raw=false since we've already saved it above
-    let mut process_options = build_process_options(cli);
+    let mut process_options = build_process_options(cli, output_dir);
     process_options.save_raw = false;
     let processed = process_page(client, page, &process_options).await?;
 
@@ -379,7 +379,7 @@ fn download_page_tree<'a>(
 ///
 /// Creates a [`ProcessOptions`] struct that controls how pages are converted
 /// and what assets are downloaded.
-fn build_process_options(cli: &Cli) -> ProcessOptions {
+fn build_process_options<'a>(cli: &Cli, output_dir: &'a Path) -> ProcessOptions<'a> {
   ProcessOptions {
     format: cli.output.format,
     save_raw: cli.output.save_raw,
@@ -388,6 +388,8 @@ fn build_process_options(cli: &Cli) -> ProcessOptions {
     download_attachments: cli.page.attachments,
     markdown_options: build_markdown_options(cli),
     asciidoc_options: build_asciidoc_options(cli),
+    output_dir: Some(output_dir),
+    overwrite: cli.output.overwrite,
   }
 }
 

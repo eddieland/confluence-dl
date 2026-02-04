@@ -51,7 +51,7 @@ pub struct ProcessedPage {
 
 /// Options controlling how a page should be processed.
 #[derive(Debug, Clone)]
-pub struct ProcessOptions {
+pub struct ProcessOptions<'a> {
   /// The target output format (Markdown or AsciiDoc).
   pub format: OutputFormat,
   /// Whether to preserve raw storage content for debugging.
@@ -66,9 +66,15 @@ pub struct ProcessOptions {
   pub markdown_options: MarkdownOptions,
   /// AsciiDoc-specific conversion options.
   pub asciidoc_options: AsciiDocOptions,
+  /// Output directory for checking existing files (skips fetch if file exists).
+  /// When `None`, all assets are always fetched.
+  pub output_dir: Option<&'a Path>,
+  /// Whether to overwrite existing files. When `false` and `output_dir` is set,
+  /// existing files will be skipped during fetch.
+  pub overwrite: bool,
 }
 
-impl Default for ProcessOptions {
+impl Default for ProcessOptions<'_> {
   fn default() -> Self {
     Self {
       format: OutputFormat::Markdown,
@@ -78,6 +84,8 @@ impl Default for ProcessOptions {
       download_attachments: false,
       markdown_options: MarkdownOptions::default(),
       asciidoc_options: AsciiDocOptions::default(),
+      output_dir: None,
+      overwrite: false,
     }
   }
 }
@@ -96,7 +104,11 @@ impl Default for ProcessOptions {
 ///
 /// # Returns
 /// A [`ProcessedPage`] containing all data needed to write the page to disk.
-pub async fn process_page(client: &dyn ConfluenceApi, page: &Page, options: &ProcessOptions) -> Result<ProcessedPage> {
+pub async fn process_page(
+  client: &dyn ConfluenceApi,
+  page: &Page,
+  options: &ProcessOptions<'_>,
+) -> Result<ProcessedPage> {
   let storage_content = page
     .body
     .as_ref()
@@ -137,8 +149,15 @@ pub async fn process_page(client: &dyn ConfluenceApi, page: &Page, options: &Pro
     if !image_refs.is_empty()
       && let Some(ref attachments) = page_attachments
     {
-      let (downloaded_images, filename_map) =
-        fetch_images_from_attachments(client, attachments, &image_refs, &options.images_dir).await?;
+      let (downloaded_images, filename_map) = fetch_images_from_attachments(
+        client,
+        attachments,
+        &image_refs,
+        &options.images_dir,
+        options.output_dir,
+        options.overwrite,
+      )
+      .await?;
 
       images = downloaded_images;
       downloaded_image_filenames.extend(filename_map.keys().cloned());
@@ -161,7 +180,7 @@ pub async fn process_page(client: &dyn ConfluenceApi, page: &Page, options: &Pro
 
     if let Some(ref attachments) = page_attachments {
       let (fetched_attachments, downloaded_info) =
-        fetch_attachments_from_list(client, attachments, skip_titles).await?;
+        fetch_attachments_from_list(client, attachments, skip_titles, options.output_dir, options.overwrite).await?;
 
       attachments_data = fetched_attachments;
 
@@ -238,11 +257,16 @@ pub fn write_processed_page(
 
 /// Fetch images from a pre-fetched attachments list and return their data
 /// along with a filename mapping for link rewriting.
+///
+/// When `output_dir` is provided and `overwrite` is false, skips fetching
+/// images that already exist on disk to avoid unnecessary network requests.
 async fn fetch_images_from_attachments(
   client: &dyn ConfluenceApi,
   attachments: &[crate::confluence::Attachment],
   image_refs: &[ImageReference],
   images_subdir: &str,
+  output_dir: Option<&Path>,
+  overwrite: bool,
 ) -> Result<(Vec<AssetData>, HashMap<String, PathBuf>)> {
   let mut assets = Vec::new();
   let mut filename_map = HashMap::new();
@@ -264,15 +288,25 @@ async fn fetch_images_from_attachments(
       .and_then(|l| l.download.as_ref())
       .with_context(|| format!("No download link for attachment: {}", image_ref.filename))?;
 
+    // Sanitize filename and build relative path
+    let safe_filename = sanitize_asset_filename(&image_ref.filename);
+    let relative_path = PathBuf::from(images_subdir).join(&safe_filename);
+
+    // Skip fetching if file already exists and we're not overwriting
+    if let Some(dir) = output_dir {
+      let full_path = dir.join(&relative_path);
+      if full_path.exists() && !overwrite {
+        // Still add to filename_map so links get rewritten correctly
+        filename_map.insert(image_ref.filename.clone(), relative_path);
+        continue;
+      }
+    }
+
     // Fetch the image bytes
     let bytes = client
       .fetch_attachment(download_url)
       .await
       .with_context(|| format!("Failed to fetch image: {}", image_ref.filename))?;
-
-    // Sanitize filename and build relative path
-    let safe_filename = sanitize_asset_filename(&image_ref.filename);
-    let relative_path = PathBuf::from(images_subdir).join(&safe_filename);
 
     filename_map.insert(image_ref.filename.clone(), relative_path.clone());
     assets.push(AssetData {
@@ -286,10 +320,15 @@ async fn fetch_images_from_attachments(
 
 /// Fetch attachments from a pre-fetched list and return their data along with
 /// metadata for link rewriting.
+///
+/// When `output_dir` is provided and `overwrite` is false, skips fetching
+/// attachments that already exist on disk to avoid unnecessary network requests.
 async fn fetch_attachments_from_list(
   client: &dyn ConfluenceApi,
   attachments: &[crate::confluence::Attachment],
   skip_titles: Option<&HashSet<String>>,
+  output_dir: Option<&Path>,
+  overwrite: bool,
 ) -> Result<(Vec<AssetData>, Vec<DownloadedAttachment>)> {
   let mut assets = Vec::new();
   let mut downloaded_info = Vec::new();
@@ -325,13 +364,26 @@ async fn fetch_attachments_from_list(
     }
     used_filenames.insert(filename.clone());
 
+    let relative_path = PathBuf::from(ATTACHMENTS_DIR).join(&filename);
+
+    // Skip fetching if file already exists and we're not overwriting
+    if let Some(dir) = output_dir {
+      let full_path = dir.join(&relative_path);
+      if full_path.exists() && !overwrite {
+        // Still add to downloaded_info so links get rewritten correctly
+        downloaded_info.push(DownloadedAttachment {
+          original_name: attachment.title.clone(),
+          relative_path,
+        });
+        continue;
+      }
+    }
+
     // Fetch the attachment bytes
     let bytes = client
       .fetch_attachment(download_url)
       .await
       .with_context(|| format!("Failed to fetch attachment: {}", attachment.title))?;
-
-    let relative_path = PathBuf::from(ATTACHMENTS_DIR).join(&filename);
 
     downloaded_info.push(DownloadedAttachment {
       original_name: attachment.title.clone(),
