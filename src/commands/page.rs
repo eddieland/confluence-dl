@@ -4,25 +4,22 @@
 //! converts them to Markdown, downloads assets, and persists everything to
 //! disk according to the current CLI settings.
 
-use std::collections::HashSet;
-use std::fs::{self, OpenOptions};
-use std::io::{ErrorKind, Write};
-use std::path::{Path, PathBuf};
-use std::process;
+use std::path::Path;
 use std::sync::Arc;
+use std::{fs, process};
 
 use anyhow::Context;
 use futures::future::join_all;
 use tokio::sync::Semaphore;
 
-use crate::asciidoc::{self, AsciiDocOptions};
+use crate::asciidoc::AsciiDocOptions;
 use crate::cli::Cli;
 use crate::color::ColorScheme;
 use crate::commands::auth::load_credentials;
 use crate::confluence::{self, ConfluenceApi};
 use crate::format::OutputFormat;
-use crate::markdown::{self, MarkdownOptions};
-use crate::{attachments, images};
+use crate::markdown::MarkdownOptions;
+use crate::processed_page::{ProcessOptions, process_page, write_processed_page};
 
 /// Execute the primary page download workflow.
 ///
@@ -167,34 +164,14 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
   println!("  {}: {}", colors.emphasis("Type"), &page.page_type);
   println!("  {}: {}", colors.emphasis("Status"), &page.status);
 
-  // Get the storage content
-  let storage_content = page
-    .body
-    .as_ref()
-    .and_then(|b| b.storage.as_ref())
-    .map(|s| s.value.as_str())
-    .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
-
-  let filename = sanitize_filename(&page.title);
-
-  if cli.output.save_raw {
-    let raw_output_path = write_raw_storage(Path::new(&cli.output.output), &filename, storage_content)?;
-    if cli.behavior.verbose > 0 {
+  if cli.behavior.verbose > 0
+    && let Some(storage_content) = page.body.as_ref().and_then(|b| b.storage.as_ref()) {
       println!(
-        "  {} {}",
-        colors.dimmed("→"),
-        colors.dimmed(format!("Raw: {}", raw_output_path.display()))
+        "  {}: {} characters",
+        colors.dimmed("Content size"),
+        colors.number(storage_content.value.len())
       );
     }
-  }
-
-  if cli.behavior.verbose > 0 {
-    println!(
-      "  {}: {} characters",
-      colors.dimmed("Content size"),
-      colors.number(storage_content.len())
-    );
-  }
 
   // Convert to target format
   let format_name = match cli.output.format {
@@ -207,134 +184,65 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
     colors.info(format!("Converting to {format_name}"))
   );
 
-  let mut output_content = match cli.output.format {
-    OutputFormat::Markdown => {
-      let options = build_markdown_options(cli);
-      markdown::storage_to_markdown_with_options(storage_content, &options)?
-    }
-    OutputFormat::AsciiDoc => {
-      let options = build_asciidoc_options(cli);
-      asciidoc::storage_to_asciidoc_with_options(storage_content, &options)?
-    }
-  };
+  // Process the page (API calls + conversion)
+  let process_options = build_process_options(cli);
+  let processed = process_page(&client, &page, &process_options).await?;
 
   if cli.behavior.verbose > 0 {
     println!(
       "  {}: {} characters",
       colors.dimmed(format!("{format_name} size")),
-      colors.number(output_content.len())
+      colors.number(processed.content.len())
     );
   }
 
-  let mut downloaded_image_filenames = HashSet::new();
-
-  // Download images if requested
+  // Log image/attachment processing
   if cli.images_links.download_images {
     println!("\n{} {}", colors.info("→"), colors.info("Processing images"));
-
-    // Extract image references from storage content
-    let image_refs = images::extract_image_references(storage_content)?;
-
-    if !image_refs.is_empty() {
+    if !processed.images.is_empty() {
       println!(
-        "  {}: {} {}",
-        colors.emphasis("Found"),
-        colors.number(image_refs.len()),
-        if image_refs.len() == 1 { "image" } else { "images" }
-      );
-
-      // Download images
-      let output_dir = Path::new(&cli.output.output);
-      let filename_map = images::download_images(
-        &client,
-        &url_info.page_id,
-        &image_refs,
-        output_dir,
-        &cli.images_links.images_dir,
-        cli.output.overwrite,
-      )
-      .await?;
-
-      println!(
-        "  {} Downloaded {} {}",
+        "  {} Processed {} {}",
         colors.success("✓"),
-        colors.number(filename_map.len()),
-        if filename_map.len() == 1 { "image" } else { "images" }
+        colors.number(processed.images.len()),
+        if processed.images.len() == 1 { "image" } else { "images" }
       );
-
-      downloaded_image_filenames.extend(filename_map.keys().cloned());
-
-      // Update output links to reference local files
-      output_content = match cli.output.format {
-        OutputFormat::Markdown => images::update_markdown_image_links(&output_content, &filename_map),
-        OutputFormat::AsciiDoc => images::update_asciidoc_image_links(&output_content, &filename_map),
-      };
     } else {
       println!("  {}", colors.dimmed("No images found in page"));
     }
   }
 
   if cli.page.attachments {
-    println!("\n{} {}", colors.info("→"), colors.info("Downloading attachments"));
-
-    let skip_titles = if downloaded_image_filenames.is_empty() {
-      None
-    } else {
-      Some(&downloaded_image_filenames)
-    };
-
-    let downloaded_attachments = attachments::download_attachments(
-      &client,
-      &url_info.page_id,
-      Path::new(&cli.output.output),
-      cli.output.overwrite,
-      skip_titles,
-    )
-    .await?;
-
-    if downloaded_attachments.is_empty() {
-      println!("  {}", colors.dimmed("No attachments found in page"));
-    } else {
+    println!("\n{} {}", colors.info("→"), colors.info("Processing attachments"));
+    if !processed.attachments.is_empty() {
       println!(
-        "  {} Downloaded {} {}",
+        "  {} Processed {} {}",
         colors.success("✓"),
-        colors.number(downloaded_attachments.len()),
-        if downloaded_attachments.len() == 1 {
+        colors.number(processed.attachments.len()),
+        if processed.attachments.len() == 1 {
           "attachment"
         } else {
           "attachments"
         }
       );
-
-      output_content = attachments::update_markdown_attachment_links(&output_content, &downloaded_attachments);
+    } else {
+      println!("  {}", colors.dimmed("No attachments found in page"));
     }
   }
 
-  // Create output directory
-  fs::create_dir_all(&cli.output.output).with_context(|| {
-    format!(
-      "Failed to create output directory {}",
-      Path::new(&cli.output.output).display()
-    )
-  })?;
-
-  let extension = cli.output.format.file_extension();
-  let output_path = Path::new(&cli.output.output).join(format!("{filename}.{extension}"));
-
-  // Check if file exists and handle overwrite
-  if output_path.exists() && !cli.output.overwrite {
-    anyhow::bail!(
-      "File already exists: {}. Use --overwrite to replace it.",
-      output_path.display()
-    );
-  }
-
-  // Write to file
+  // Write to disk (I/O phase)
   println!("\n{} {}", colors.info("→"), colors.info("Writing to disk"));
+  let output_dir = Path::new(&cli.output.output);
+  let output_path = write_processed_page(&processed, output_dir, cli.output.format, cli.output.overwrite)?;
   println!("  {}: {}", colors.emphasis("File"), colors.path(output_path.display()));
 
-  fs::write(&output_path, output_content)
-    .with_context(|| format!("Failed to write {} to {}", format_name, output_path.display()))?;
+  if cli.output.save_raw && cli.behavior.verbose > 0 {
+    let raw_path = output_dir.join(format!("{}.raw.xml", processed.filename));
+    println!(
+      "  {} {}",
+      colors.dimmed("→"),
+      colors.dimmed(format!("Raw: {}", raw_path.display()))
+    );
+  }
 
   Ok(())
 }
@@ -375,7 +283,6 @@ fn download_page_tree<'a>(
       .await
       .map_err(|_| anyhow::anyhow!("Parallel download limiter became unavailable"))?;
 
-    // Download the current page
     let page = &tree.page;
 
     if cli.behavior.verbose > 0 {
@@ -387,136 +294,35 @@ fn download_page_tree<'a>(
       );
     }
 
-    // Get the storage content
-    let storage_content = page
-      .body
-      .as_ref()
-      .and_then(|b| b.storage.as_ref())
-      .map(|s| s.value.as_str())
-      .ok_or_else(|| anyhow::anyhow!("Page has no storage content"))?;
+    // Process the page (API calls + conversion)
+    let process_options = build_process_options(cli);
+    let processed = process_page(client, page, &process_options).await?;
 
-    // Generate filename from page title (needed for raw XML saving)
-    let filename = sanitize_filename(&page.title);
-
-    // Save raw Confluence storage format BEFORE parsing if requested
-    // This ensures we can debug parse failures
-    if cli.output.save_raw {
-      let raw_output_path = write_raw_storage(output_dir, &filename, storage_content)?;
-
-      if cli.behavior.verbose > 0 {
-        println!(
-          "    {} {}",
-          colors.dimmed("→"),
-          colors.dimmed(format!("Raw: {}", raw_output_path.display()))
-        );
-      }
+    if cli.behavior.verbose > 0 && !processed.attachments.is_empty() {
+      println!(
+        "    {} {}",
+        colors.dimmed("Attachments:"),
+        colors.number(processed.attachments.len())
+      );
+    } else if cli.behavior.verbose > 1 && cli.page.attachments && processed.attachments.is_empty() {
+      println!("    {}", colors.dimmed("No attachments found"));
     }
 
-    // Convert to target format
-    let mut output_content = match cli.output.format {
-      OutputFormat::Markdown => {
-        let options = build_markdown_options(cli);
-        markdown::storage_to_markdown_with_options(storage_content, &options)
-          .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to markdown: {}", page.title, e))?
-      }
-      OutputFormat::AsciiDoc => {
-        let options = build_asciidoc_options(cli);
-        asciidoc::storage_to_asciidoc_with_options(storage_content, &options)
-          .map_err(|e| anyhow::anyhow!("Failed to convert page '{}' to asciidoc: {}", page.title, e))?
-      }
-    };
-
-    let mut downloaded_image_filenames = HashSet::new();
-
-    // Download images if requested
-    if cli.images_links.download_images {
-      let image_refs = images::extract_image_references(storage_content)?;
-
-      if !image_refs.is_empty() {
-        let filename_map = images::download_images(
-          client,
-          &page.id,
-          &image_refs,
-          output_dir,
-          &cli.images_links.images_dir,
-          cli.output.overwrite,
-        )
-        .await?;
-
-        downloaded_image_filenames.extend(filename_map.keys().cloned());
-
-        output_content = match cli.output.format {
-          OutputFormat::Markdown => images::update_markdown_image_links(&output_content, &filename_map),
-          OutputFormat::AsciiDoc => images::update_asciidoc_image_links(&output_content, &filename_map),
-        };
-      }
-    }
-
-    if cli.page.attachments {
-      let skip_titles = if downloaded_image_filenames.is_empty() {
-        None
-      } else {
-        Some(&downloaded_image_filenames)
-      };
-
-      let downloaded_attachments =
-        attachments::download_attachments(client, &page.id, output_dir, cli.output.overwrite, skip_titles).await?;
-
-      if !downloaded_attachments.is_empty() {
-        if cli.behavior.verbose > 0 {
-          println!(
-            "    {} {}",
-            colors.dimmed("Attachments:"),
-            colors.number(downloaded_attachments.len())
-          );
-        }
-        output_content = attachments::update_markdown_attachment_links(&output_content, &downloaded_attachments);
-      } else if cli.behavior.verbose > 1 {
-        println!("    {}", colors.dimmed("No attachments found"));
-      }
-    }
-
-    // Generate output path
-    let extension = cli.output.format.file_extension();
-    let output_path = output_dir.join(format!("{filename}.{extension}"));
-
-    // Create parent directory
-    if let Some(parent) = output_path.parent() {
-      fs::create_dir_all(parent).with_context(|| format!("Failed to create directory {}", parent.display()))?;
-    }
-
-    if cli.output.overwrite {
-      // Write output to file
-      fs::write(&output_path, &output_content)
-        .with_context(|| format!("Failed to write output to {}", output_path.display()))?;
-    } else {
-      match OpenOptions::new().write(true).create_new(true).open(&output_path) {
-        Ok(mut file) => {
-          file
-            .write_all(output_content.as_bytes())
-            .with_context(|| format!("Failed to write output to {}", output_path.display()))?;
-        }
-        Err(err) if err.kind() == ErrorKind::AlreadyExists => {
-          let message = format!(
-            "File already exists: {}. Use --overwrite to replace it.",
-            output_path.display()
-          );
-
-          eprintln!("{} {}", colors.error("✗"), colors.error(&message));
-
-          anyhow::bail!(message);
-        }
-        Err(err) => {
-          anyhow::bail!("Failed to create output file {}: {}", output_path.display(), err);
-        }
-      }
-    }
+    // Write processed page to disk (I/O phase)
+    let output_path = write_processed_page(&processed, output_dir, cli.output.format, cli.output.overwrite)?;
 
     if !cli.behavior.quiet {
       println!("  {} {}", colors.success("✓"), colors.path(output_path.display()));
     }
 
-    // Raw XML was already saved before parsing (if requested)
+    if cli.output.save_raw && cli.behavior.verbose > 0 {
+      let raw_path = output_dir.join(format!("{}.raw.xml", processed.filename));
+      println!(
+        "    {} {}",
+        colors.dimmed("→"),
+        colors.dimmed(format!("Raw: {}", raw_path.display()))
+      );
+    }
 
     // Release permit before scheduling children so they can use the slot.
     drop(permit);
@@ -524,7 +330,7 @@ fn download_page_tree<'a>(
     // Download child pages recursively
     if !tree.children.is_empty() {
       // Create subdirectory for children
-      let child_dir = output_dir.join(&filename);
+      let child_dir = output_dir.join(&processed.filename);
       fs::create_dir_all(&child_dir)
         .with_context(|| format!("Failed to create directory for child pages at {}", child_dir.display()))?;
 
@@ -542,18 +348,20 @@ fn download_page_tree<'a>(
   })
 }
 
-/// Persist the raw Confluence storage payload next to the Markdown export.
-fn write_raw_storage(output_dir: &Path, filename: &str, storage_content: &str) -> anyhow::Result<PathBuf> {
-  let raw_output_path = output_dir.join(format!("{filename}.raw.xml"));
-  if let Some(parent) = raw_output_path.parent() {
-    fs::create_dir_all(parent)
-      .with_context(|| format!("Failed to create directory for raw storage at {}", parent.display()))?;
+/// Build the processing options from CLI settings.
+///
+/// Creates a [`ProcessOptions`] struct that controls how pages are converted
+/// and what assets are downloaded.
+fn build_process_options(cli: &Cli) -> ProcessOptions {
+  ProcessOptions {
+    format: cli.output.format,
+    save_raw: cli.output.save_raw,
+    download_images: cli.images_links.download_images,
+    images_dir: cli.images_links.images_dir.clone(),
+    download_attachments: cli.page.attachments,
+    markdown_options: build_markdown_options(cli),
+    asciidoc_options: build_asciidoc_options(cli),
   }
-
-  fs::write(&raw_output_path, storage_content)
-    .with_context(|| format!("Failed to write raw storage to {}", raw_output_path.display()))?;
-
-  Ok(raw_output_path)
 }
 
 /// Build the Markdown conversion options from the CLI settings.
@@ -579,26 +387,6 @@ fn build_asciidoc_options(cli: &Cli) -> AsciiDocOptions {
 /// Count the number of pages represented inside a [`confluence::PageTree`].
 fn count_pages_in_tree(tree: &confluence::PageTree) -> usize {
   1 + tree.children.iter().map(count_pages_in_tree).sum::<usize>()
-}
-
-/// Sanitize a Confluence page title so it can be used as a filesystem name.
-///
-/// Removes/normalizes characters that are potentially unsafe across
-/// platforms, collapsing repeated whitespace while keeping readability.
-fn sanitize_filename(title: &str) -> String {
-  title
-    .chars()
-    .map(|c| {
-      if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
-        c
-      } else {
-        '_'
-      }
-    })
-    .collect::<String>()
-    .replace("  ", " ")
-    .trim()
-    .to_string()
 }
 
 #[cfg(test)]
@@ -660,6 +448,17 @@ mod tests {
     }
 
     async fn download_attachment(&self, _url: &str, output_path: &std::path::Path) -> Result<()> {
+      let bytes = self.fetch_attachment(_url).await?;
+
+      if let Some(parent) = output_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+      }
+
+      tokio::fs::write(output_path, bytes).await?;
+      Ok(())
+    }
+
+    async fn fetch_attachment(&self, _url: &str) -> Result<Vec<u8>> {
       let current = {
         let mut guard = self.counter.lock().await;
         *guard += 1;
@@ -675,15 +474,9 @@ mod tests {
         }
       }
 
-      let io_result = async {
+      let result = async {
         sleep(self.delay).await;
-
-        if let Some(parent) = output_path.parent() {
-          tokio::fs::create_dir_all(parent).await?;
-        }
-
-        tokio::fs::write(output_path, b"test-data").await?;
-        Result::<()>::Ok(())
+        Result::<Vec<u8>>::Ok(b"test-data".to_vec())
       }
       .await;
 
@@ -692,7 +485,7 @@ mod tests {
         *guard -= 1;
       }
 
-      io_result
+      result
     }
 
     async fn test_auth(&self) -> Result<UserInfo> {
@@ -748,22 +541,6 @@ mod tests {
       children,
       depth: 0,
     }
-  }
-
-  #[test]
-  fn write_raw_storage_creates_file_with_content() {
-    let temp_dir = tempdir().unwrap();
-    let nested_dir = temp_dir.path().join("raw").join("pages");
-    let content = "<p>Example</p>";
-
-    let saved_path = write_raw_storage(&nested_dir, "Example Page", content).expect("raw storage should be saved");
-
-    assert_eq!(
-      saved_path,
-      nested_dir.join("Example Page.raw.xml"),
-      "raw output path should live under the provided directory"
-    );
-    assert_eq!(fs::read_to_string(&saved_path).unwrap(), content);
   }
 
   #[tokio::test]

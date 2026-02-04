@@ -48,6 +48,19 @@ pub trait ConfluenceApi: Send + Sync {
   /// `Ok(())` on success, or an error detailing why the download failed.
   async fn download_attachment(&self, url: &str, output_path: &Path) -> Result<()>;
 
+  /// Fetch attachment bytes without writing to disk.
+  ///
+  /// This method retrieves the raw bytes of an attachment, allowing the caller
+  /// to handle persistence separately. Useful when separating download logic
+  /// from file I/O.
+  ///
+  /// # Arguments
+  /// * `url` - Direct or relative link to the attachment download endpoint.
+  ///
+  /// # Returns
+  /// The raw bytes of the attachment on success.
+  async fn fetch_attachment(&self, url: &str) -> Result<Vec<u8>>;
+
   /// Test authentication and return user information.
   ///
   /// # Returns

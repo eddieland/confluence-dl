@@ -250,6 +250,22 @@ impl ConfluenceApi for ConfluenceClient {
   }
 
   async fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()> {
+    let bytes = self.fetch_attachment(url).await?;
+
+    if let Some(parent) = output_path.parent() {
+      tokio::fs::create_dir_all(parent)
+        .await
+        .context("Failed to create output directory for attachment")?;
+    }
+
+    tokio::fs::write(output_path, bytes)
+      .await
+      .context("Failed to write attachment to file")?;
+
+    Ok(())
+  }
+
+  async fn fetch_attachment(&self, url: &str) -> Result<Vec<u8>> {
     let full_url = self.resolve_attachment_url(url);
 
     self.rate_limiter.acquire().await;
@@ -268,27 +284,13 @@ impl ConfluenceApi for ConfluenceClient {
         .text()
         .await
         .unwrap_or_else(|_| String::from("(no error details)"));
-      let attachment_name = output_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("<unknown attachment>");
       return Err(anyhow!(
-        "Failed to download attachment '{attachment_name}' from {full_url}: {status} - {error_text}"
+        "Failed to fetch attachment from {full_url}: {status} - {error_text}"
       ));
     }
 
-    if let Some(parent) = output_path.parent() {
-      tokio::fs::create_dir_all(parent)
-        .await
-        .context("Failed to create output directory for attachment")?;
-    }
-
     let bytes = response.bytes().await.context("Failed to read attachment bytes")?;
-    tokio::fs::write(output_path, bytes)
-      .await
-      .context("Failed to write attachment to file")?;
-
-    Ok(())
+    Ok(bytes.to_vec())
   }
 
   async fn test_auth(&self) -> Result<UserInfo> {

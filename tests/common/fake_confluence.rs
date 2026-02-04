@@ -118,6 +118,10 @@ impl ConfluenceApi for FakeConfluenceClient {
     Ok(())
   }
 
+  async fn fetch_attachment(&self, _url: &str) -> Result<Vec<u8>> {
+    Ok(b"fake image data".to_vec())
+  }
+
   async fn test_auth(&self) -> Result<UserInfo> {
     if self.auth_should_succeed {
       Ok(UserInfo {
