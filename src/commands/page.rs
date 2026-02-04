@@ -19,7 +19,7 @@ use crate::commands::auth::load_credentials;
 use crate::confluence::{self, ConfluenceApi};
 use crate::format::OutputFormat;
 use crate::markdown::MarkdownOptions;
-use crate::processed_page::{ProcessOptions, process_page, sanitize_filename, write_processed_page, write_raw_storage};
+use crate::processed_page::{ProcessOptions, process_page, write_processed_page};
 
 /// Execute the primary page download workflow.
 ///
@@ -164,40 +164,18 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
   println!("  {}: {}", colors.emphasis("Type"), &page.page_type);
   println!("  {}: {}", colors.emphasis("Status"), &page.status);
 
-  // Get storage content for size display and raw saving
-  let storage_content = page
-    .body
-    .as_ref()
-    .and_then(|b| b.storage.as_ref())
-    .map(|s| s.value.as_str());
-
+  // Get storage content for size display
   if cli.behavior.verbose > 0
-    && let Some(content) = storage_content
+    && let Some(storage) = page.body.as_ref().and_then(|b| b.storage.as_ref())
   {
     println!(
       "  {}: {} characters",
       colors.dimmed("Content size"),
-      colors.number(content.len())
+      colors.number(storage.value.len())
     );
   }
 
   let output_dir = Path::new(&cli.output.output);
-
-  // Save raw Confluence storage format BEFORE parsing if requested.
-  // This ensures we can debug parse failures.
-  if cli.output.save_raw
-    && let Some(content) = storage_content
-  {
-    let filename = sanitize_filename(&page.title);
-    let raw_path = write_raw_storage(output_dir, &filename, content, cli.output.overwrite)?;
-    if cli.behavior.verbose > 0 {
-      println!(
-        "  {} {}",
-        colors.dimmed("→"),
-        colors.dimmed(format!("Raw: {}", raw_path.display()))
-      );
-    }
-  }
 
   // Convert to target format
   let format_name = match cli.output.format {
@@ -211,9 +189,7 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
   );
 
   // Process the page (API calls + conversion)
-  // Note: save_raw=false since we've already saved it above
-  let mut process_options = build_process_options(cli, output_dir);
-  process_options.save_raw = false;
+  let process_options = build_process_options(cli, output_dir);
   let processed = process_page(&client, &page, &process_options).await?;
 
   if cli.behavior.verbose > 0 {
@@ -312,26 +288,8 @@ fn download_page_tree<'a>(
       );
     }
 
-    // Save raw Confluence storage format BEFORE parsing if requested.
-    // This ensures we can debug parse failures.
-    let filename = sanitize_filename(&page.title);
-    if cli.output.save_raw
-      && let Some(storage_content) = page.body.as_ref().and_then(|b| b.storage.as_ref())
-    {
-      let raw_path = write_raw_storage(output_dir, &filename, &storage_content.value, cli.output.overwrite)?;
-      if cli.behavior.verbose > 0 {
-        println!(
-          "    {} {}",
-          colors.dimmed("→"),
-          colors.dimmed(format!("Raw: {}", raw_path.display()))
-        );
-      }
-    }
-
     // Process the page (API calls + conversion)
-    // Note: save_raw=false since we've already saved it above
-    let mut process_options = build_process_options(cli, output_dir);
-    process_options.save_raw = false;
+    let process_options = build_process_options(cli, output_dir);
     let processed = process_page(client, page, &process_options).await?;
 
     if cli.behavior.verbose > 0 && !processed.attachments.is_empty() {
@@ -356,8 +314,8 @@ fn download_page_tree<'a>(
 
     // Download child pages recursively
     if !tree.children.is_empty() {
-      // Create subdirectory for children (use our local filename since it matches processed.filename)
-      let child_dir = output_dir.join(&filename);
+      // Create subdirectory for children
+      let child_dir = output_dir.join(&processed.filename);
       fs::create_dir_all(&child_dir)
         .with_context(|| format!("Failed to create directory for child pages at {}", child_dir.display()))?;
 

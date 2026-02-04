@@ -407,28 +407,6 @@ fn write_asset(path: &Path, content: &[u8], overwrite: bool) -> Result<()> {
   write_file(path, content, overwrite)
 }
 
-/// Write raw Confluence storage format to disk for debugging.
-///
-/// This function should be called BEFORE conversion to ensure the raw XML is
-/// saved even if conversion fails. This aids in debugging parse failures.
-///
-/// # Arguments
-/// * `output_dir` - Directory to write the raw file.
-/// * `filename` - Base filename (without extension).
-/// * `storage_content` - The raw Confluence storage XML.
-/// * `overwrite` - Whether to overwrite existing files.
-///
-/// # Returns
-/// The path to the written raw file.
-pub fn write_raw_storage(output_dir: &Path, filename: &str, storage_content: &str, overwrite: bool) -> Result<PathBuf> {
-  fs::create_dir_all(output_dir)
-    .with_context(|| format!("Failed to create directory for raw storage at {}", output_dir.display()))?;
-
-  let raw_path = output_dir.join(format!("{filename}.raw.xml"));
-  write_file(&raw_path, storage_content.as_bytes(), overwrite)?;
-  Ok(raw_path)
-}
-
 /// Write a file to disk, respecting the overwrite setting.
 fn write_file(path: &Path, content: &[u8], overwrite: bool) -> Result<()> {
   if overwrite {
