@@ -13,3 +13,4 @@ pub mod credentials;
 pub mod format;
 pub mod images;
 pub mod markdown;
+pub mod processed_page;
