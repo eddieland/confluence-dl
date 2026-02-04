@@ -116,13 +116,29 @@ pub async fn process_page(client: &dyn ConfluenceApi, page: &Page, options: &Pro
 
   let mut images = Vec::new();
   let mut downloaded_image_filenames = HashSet::new();
+  let mut attachments_data = Vec::new();
+
+  // Fetch attachments once if we need them for images or attachments
+  let page_attachments = if options.download_images || options.download_attachments {
+    Some(
+      client
+        .get_attachments(&page.id)
+        .await
+        .context("Failed to fetch page attachments")?,
+    )
+  } else {
+    None
+  };
 
   // Process images if requested
   if options.download_images {
     let image_refs = images::extract_image_references(storage_content)?;
 
-    if !image_refs.is_empty() {
-      let (downloaded_images, filename_map) = fetch_images(client, &page.id, &image_refs, &options.images_dir).await?;
+    if !image_refs.is_empty()
+      && let Some(ref attachments) = page_attachments
+    {
+      let (downloaded_images, filename_map) =
+        fetch_images_from_attachments(client, attachments, &image_refs, &options.images_dir).await?;
 
       images = downloaded_images;
       downloaded_image_filenames.extend(filename_map.keys().cloned());
@@ -135,8 +151,6 @@ pub async fn process_page(client: &dyn ConfluenceApi, page: &Page, options: &Pro
     }
   }
 
-  let mut attachments_data = Vec::new();
-
   // Process attachments if requested
   if options.download_attachments {
     let skip_titles = if downloaded_image_filenames.is_empty() {
@@ -145,12 +159,15 @@ pub async fn process_page(client: &dyn ConfluenceApi, page: &Page, options: &Pro
       Some(&downloaded_image_filenames)
     };
 
-    let (fetched_attachments, downloaded_info) = fetch_attachments(client, &page.id, skip_titles).await?;
+    if let Some(ref attachments) = page_attachments {
+      let (fetched_attachments, downloaded_info) =
+        fetch_attachments_from_list(client, attachments, skip_titles).await?;
 
-    attachments_data = fetched_attachments;
+      attachments_data = fetched_attachments;
 
-    if !downloaded_info.is_empty() {
-      output_content = attachments::update_markdown_attachment_links(&output_content, &downloaded_info);
+      if !downloaded_info.is_empty() {
+        output_content = attachments::update_markdown_attachment_links(&output_content, &downloaded_info);
+      }
     }
   }
 
@@ -219,23 +236,11 @@ pub fn write_processed_page(
   Ok(output_path)
 }
 
-/// Result of processing a page, containing both the processed page and
-/// information about what was downloaded (useful for logging).
-#[derive(Debug)]
-pub struct ProcessResult {
-  /// The processed page ready for writing.
-  pub page: ProcessedPage,
-  /// Number of images that were fetched.
-  pub image_count: usize,
-  /// Number of attachments that were fetched.
-  pub attachment_count: usize,
-}
-
-/// Fetch images referenced in a page and return their data along with a
-/// filename mapping for link rewriting.
-async fn fetch_images(
+/// Fetch images from a pre-fetched attachments list and return their data
+/// along with a filename mapping for link rewriting.
+async fn fetch_images_from_attachments(
   client: &dyn ConfluenceApi,
-  page_id: &str,
+  attachments: &[crate::confluence::Attachment],
   image_refs: &[ImageReference],
   images_subdir: &str,
 ) -> Result<(Vec<AssetData>, HashMap<String, PathBuf>)> {
@@ -245,12 +250,6 @@ async fn fetch_images(
   if image_refs.is_empty() {
     return Ok((assets, filename_map));
   }
-
-  // Get all attachments for the page to find image URLs
-  let attachments = client
-    .get_attachments(page_id)
-    .await
-    .context("Failed to fetch page attachments")?;
 
   for image_ref in image_refs {
     // Find the attachment matching this image
@@ -285,20 +284,15 @@ async fn fetch_images(
   Ok((assets, filename_map))
 }
 
-/// Fetch attachments for a page and return their data along with metadata for
-/// link rewriting.
-async fn fetch_attachments(
+/// Fetch attachments from a pre-fetched list and return their data along with
+/// metadata for link rewriting.
+async fn fetch_attachments_from_list(
   client: &dyn ConfluenceApi,
-  page_id: &str,
+  attachments: &[crate::confluence::Attachment],
   skip_titles: Option<&HashSet<String>>,
 ) -> Result<(Vec<AssetData>, Vec<DownloadedAttachment>)> {
   let mut assets = Vec::new();
   let mut downloaded_info = Vec::new();
-
-  let attachments = client
-    .get_attachments(page_id)
-    .await
-    .context("Failed to fetch page attachments")?;
 
   if attachments.is_empty() {
     return Ok((assets, downloaded_info));
@@ -309,9 +303,10 @@ async fn fetch_attachments(
   for attachment in attachments {
     // Skip if this attachment was already downloaded as an image
     if let Some(skip) = skip_titles
-      && skip.contains(&attachment.title) {
-        continue;
-      }
+      && skip.contains(&attachment.title)
+    {
+      continue;
+    }
 
     let download_url = match attachment.links.as_ref().and_then(|links| links.download.as_ref()) {
       Some(url) => url,
@@ -360,6 +355,28 @@ fn write_asset(path: &Path, content: &[u8], overwrite: bool) -> Result<()> {
   write_file(path, content, overwrite)
 }
 
+/// Write raw Confluence storage format to disk for debugging.
+///
+/// This function should be called BEFORE conversion to ensure the raw XML is
+/// saved even if conversion fails. This aids in debugging parse failures.
+///
+/// # Arguments
+/// * `output_dir` - Directory to write the raw file.
+/// * `filename` - Base filename (without extension).
+/// * `storage_content` - The raw Confluence storage XML.
+/// * `overwrite` - Whether to overwrite existing files.
+///
+/// # Returns
+/// The path to the written raw file.
+pub fn write_raw_storage(output_dir: &Path, filename: &str, storage_content: &str, overwrite: bool) -> Result<PathBuf> {
+  fs::create_dir_all(output_dir)
+    .with_context(|| format!("Failed to create directory for raw storage at {}", output_dir.display()))?;
+
+  let raw_path = output_dir.join(format!("{filename}.raw.xml"));
+  write_file(&raw_path, storage_content.as_bytes(), overwrite)?;
+  Ok(raw_path)
+}
+
 /// Write a file to disk, respecting the overwrite setting.
 fn write_file(path: &Path, content: &[u8], overwrite: bool) -> Result<()> {
   if overwrite {
@@ -386,7 +403,10 @@ fn write_file(path: &Path, content: &[u8], overwrite: bool) -> Result<()> {
 }
 
 /// Sanitize a Confluence page title so it can be used as a filesystem name.
-fn sanitize_filename(title: &str) -> String {
+///
+/// Removes/normalizes characters that are potentially unsafe across
+/// platforms, collapsing repeated whitespace while keeping readability.
+pub fn sanitize_filename(title: &str) -> String {
   title
     .chars()
     .map(|c| {
