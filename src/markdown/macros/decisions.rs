@@ -197,6 +197,98 @@ struct DecisionInfo {
   body: Option<String>,
 }
 
+/// Represents an ADF inline formatting mark applied to text content.
+enum AdfMark {
+  Strong,
+  Em,
+  Code,
+  Strike,
+  Underline,
+  Link { href: String },
+  Subsup { variant: String },
+}
+
+/// Parses a single `ac:adf-mark` element into an `AdfMark`.
+///
+/// # Arguments
+/// * `node` - The `<ac:adf-mark>` element to inspect.
+///
+/// # Returns
+/// `Some(AdfMark)` when the mark type is recognized, otherwise `None`.
+fn parse_single_mark(node: Node) -> Option<AdfMark> {
+  let mark_type = get_attribute(node, "type")?;
+  match mark_type.as_str() {
+    "strong" => Some(AdfMark::Strong),
+    "em" => Some(AdfMark::Em),
+    "code" => Some(AdfMark::Code),
+    "strike" => Some(AdfMark::Strike),
+    "underline" => Some(AdfMark::Underline),
+    "link" => {
+      let href = find_child_by_tag_and_attr(node, "ac:adf-attribute", "key", "href")
+        .map(get_element_text)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+      Some(AdfMark::Link { href })
+    }
+    "subsup" => {
+      let variant = find_child_by_tag_and_attr(node, "ac:adf-attribute", "key", "type")
+        .map(get_element_text)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+      Some(AdfMark::Subsup { variant })
+    }
+    _ => None,
+  }
+}
+
+/// Collects all `AdfMark`s from the `ac:adf-mark` children of a node.
+///
+/// Used for Structure A where marks are siblings of `ac:adf-attribute` inside
+/// an `ac:adf-leaf`.
+fn collect_marks_from_children(node: Node) -> Vec<AdfMark> {
+  node
+    .children()
+    .filter(|child| matches_tag(*child, "ac:adf-mark"))
+    .filter_map(|child| parse_single_mark(child))
+    .collect()
+}
+
+/// Wraps text with Markdown formatting syntax for the given marks.
+///
+/// Marks are applied in reverse order so that the first mark in the list
+/// becomes the outermost wrapper.
+fn apply_marks(text: &str, marks: &[AdfMark]) -> String {
+  if text.trim().is_empty() {
+    return String::new();
+  }
+
+  let mut result = text.to_string();
+  for mark in marks.iter().rev() {
+    result = match mark {
+      AdfMark::Strong => format!("**{result}**"),
+      AdfMark::Em => format!("*{result}*"),
+      AdfMark::Code => format!("`{result}`"),
+      AdfMark::Strike => format!("~~{result}~~"),
+      AdfMark::Underline => result,
+      AdfMark::Link { href } => {
+        if href.is_empty() {
+          result
+        } else {
+          format!("[{result}]({href})")
+        }
+      }
+      AdfMark::Subsup { variant } => match variant.as_str() {
+        "sub" => format!("<sub>{result}</sub>"),
+        "sup" => format!("<sup>{result}</sup>"),
+        _ => result,
+      },
+    };
+  }
+  result
+}
+
 /// Renders the decision report macro, which links to dynamic Confluence
 /// content.
 ///
@@ -783,6 +875,37 @@ fn collect_adf_inline(node: Node, buffer: &mut String) {
         return;
       }
 
+      // Structure B: ac:adf-mark as a wrapper element around inline content.
+      if matches_tag(node, "ac:adf-mark") {
+        if let Some(mark) = parse_single_mark(node) {
+          let mut sub_buffer = String::new();
+          for child in node.children() {
+            collect_adf_inline(child, &mut sub_buffer);
+          }
+          let marked = apply_marks(&sub_buffer, &[mark]);
+          if !marked.is_empty() {
+            append_inline_text(buffer, &marked);
+          }
+        }
+        return;
+      }
+
+      // Structure A: ac:adf-leaf with ac:adf-mark children as sibling marks.
+      if matches_tag(node, "ac:adf-leaf")
+        && get_attribute(node, "type").as_deref() == Some("text")
+        && node.children().any(|child| matches_tag(child, "ac:adf-mark"))
+      {
+        let marks = collect_marks_from_children(node);
+        let text = find_child_by_tag_and_attr(node, "ac:adf-attribute", "key", "text")
+          .map(get_element_text)
+          .unwrap_or_default();
+        let marked = apply_marks(&text, &marks);
+        if !marked.is_empty() {
+          append_inline_text(buffer, &marked);
+        }
+        return;
+      }
+
       if (matches_tag(node, "ac:adf-node") || matches_tag(node, "ac:adf-leaf"))
         && let Some(node_type) = get_attribute(node, "type")
         && node_type == "hardBreak"
@@ -796,5 +919,219 @@ fn collect_adf_inline(node: Node, buffer: &mut String) {
       }
     }
     _ => {}
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use roxmltree::Document;
+
+  use super::*;
+  use crate::markdown::utils::wrap_with_namespaces;
+
+  /// Helper: parse ADF XML and collect inline text from the root's first child.
+  fn collect_inline(xml: &str) -> String {
+    let wrapped = wrap_with_namespaces(xml);
+    let doc = Document::parse(&wrapped).unwrap();
+    let root = doc
+      .descendants()
+      .find(|n| matches_tag(*n, "ac:adf-node") && get_attribute(*n, "type").as_deref() == Some("paragraph"))
+      .unwrap();
+    collect_adf_inline_text(root).unwrap_or_default()
+  }
+
+  #[test]
+  fn test_structure_a_strong_mark() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="strong"/>
+          <ac:adf-attribute key="text">bold text</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "**bold text**");
+  }
+
+  #[test]
+  fn test_structure_b_strong_mark() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-mark type="strong">
+          <ac:adf-leaf type="text">
+            <ac:adf-attribute key="text">bold text</ac:adf-attribute>
+          </ac:adf-leaf>
+        </ac:adf-mark>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "**bold text**");
+  }
+
+  #[test]
+  fn test_em_mark() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="em"/>
+          <ac:adf-attribute key="text">italic</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "*italic*");
+  }
+
+  #[test]
+  fn test_code_mark() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="code"/>
+          <ac:adf-attribute key="text">inline code</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "`inline code`");
+  }
+
+  #[test]
+  fn test_strike_mark() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="strike"/>
+          <ac:adf-attribute key="text">deleted</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "~~deleted~~");
+  }
+
+  #[test]
+  fn test_link_mark_structure_a() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="link">
+            <ac:adf-attribute key="href">https://example.com</ac:adf-attribute>
+          </ac:adf-mark>
+          <ac:adf-attribute key="text">click here</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "[click here](https://example.com)");
+  }
+
+  #[test]
+  fn test_link_mark_structure_b() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-mark type="link">
+          <ac:adf-attribute key="href">https://example.com</ac:adf-attribute>
+          <ac:adf-leaf type="text">
+            <ac:adf-attribute key="text">click here</ac:adf-attribute>
+          </ac:adf-leaf>
+        </ac:adf-mark>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "[click here](https://example.com)");
+  }
+
+  #[test]
+  fn test_nested_marks_structure_a() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="strong"/>
+          <ac:adf-mark type="em"/>
+          <ac:adf-attribute key="text">both</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "***both***");
+  }
+
+  #[test]
+  fn test_nested_marks_structure_b() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-mark type="strong">
+          <ac:adf-mark type="em">
+            <ac:adf-leaf type="text">
+              <ac:adf-attribute key="text">both</ac:adf-attribute>
+            </ac:adf-leaf>
+          </ac:adf-mark>
+        </ac:adf-mark>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "***both***");
+  }
+
+  #[test]
+  fn test_whitespace_only_text_with_marks() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="strong"/>
+          <ac:adf-attribute key="text">   </ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "");
+  }
+
+  #[test]
+  fn test_subsup_mark() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="subsup">
+            <ac:adf-attribute key="type">sup</ac:adf-attribute>
+          </ac:adf-mark>
+          <ac:adf-attribute key="text">2</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "<sup>2</sup>");
+  }
+
+  #[test]
+  fn test_mixed_plain_and_marked_text() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-attribute key="text">Hello </ac:adf-attribute>
+        </ac:adf-leaf>
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="strong"/>
+          <ac:adf-attribute key="text">world</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "Hello **world**");
+  }
+
+  #[test]
+  fn test_no_marks_regression() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-attribute key="text">plain text</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "plain text");
+  }
+
+  #[test]
+  fn test_underline_mark_passthrough() {
+    let xml = r#"
+      <ac:adf-node type="paragraph">
+        <ac:adf-leaf type="text">
+          <ac:adf-mark type="underline"/>
+          <ac:adf-attribute key="text">underlined</ac:adf-attribute>
+        </ac:adf-leaf>
+      </ac:adf-node>
+    "#;
+    assert_eq!(collect_inline(xml), "underlined");
   }
 }
