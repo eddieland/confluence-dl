@@ -188,65 +188,85 @@ impl ConfluenceApi for ConfluenceClient {
   }
 
   async fn get_child_pages(&self, page_id: &str) -> Result<Vec<Page>> {
-    self.rate_limiter.acquire().await;
+    let initial_url = format!("{}/wiki/rest/api/content/{}/child/page", self.base_url, page_id);
+    let mut all_pages = Vec::new();
+    let mut next_url = Some(initial_url);
 
-    let url = format!("{}/wiki/rest/api/content/{}/child/page", self.base_url, page_id);
+    while let Some(url) = next_url {
+      self.rate_limiter.acquire().await;
 
-    let response = self
-      .client
-      .get(&url)
-      .header("Authorization", self.auth_header())
-      .header("Accept", "application/json")
-      .send()
-      .await
-      .context("Failed to fetch child pages from Confluence API")?;
-
-    if !response.status().is_success() {
-      let status = response.status();
-      let error_text = response
-        .text()
+      let response = self
+        .client
+        .get(&url)
+        .header("Authorization", self.auth_header())
+        .header("Accept", "application/json")
+        .send()
         .await
-        .unwrap_or_else(|_| String::from("(no error details)"));
-      return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
+        .context("Failed to fetch child pages from Confluence API")?;
+
+      if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response
+          .text()
+          .await
+          .unwrap_or_else(|_| String::from("(no error details)"));
+        return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
+      }
+
+      let child_pages: ChildPagesResponse = response
+        .json()
+        .await
+        .context("Failed to parse child pages response from Confluence API")?;
+
+      all_pages.extend(child_pages.results);
+      next_url = child_pages
+        .links
+        .and_then(|l| l.next)
+        .map(|next| format!("{}{next}", self.base_url));
     }
 
-    let child_pages: ChildPagesResponse = response
-      .json()
-      .await
-      .context("Failed to parse child pages response from Confluence API")?;
-
-    Ok(child_pages.results)
+    Ok(all_pages)
   }
 
   async fn get_attachments(&self, page_id: &str) -> Result<Vec<Attachment>> {
-    self.rate_limiter.acquire().await;
+    let initial_url = format!("{}/wiki/rest/api/content/{}/child/attachment", self.base_url, page_id);
+    let mut all_attachments = Vec::new();
+    let mut next_url = Some(initial_url);
 
-    let url = format!("{}/wiki/rest/api/content/{}/child/attachment", self.base_url, page_id);
+    while let Some(url) = next_url {
+      self.rate_limiter.acquire().await;
 
-    let response = self
-      .client
-      .get(&url)
-      .header("Authorization", self.auth_header())
-      .header("Accept", "application/json")
-      .send()
-      .await
-      .context("Failed to fetch attachments from Confluence API")?;
-
-    if !response.status().is_success() {
-      let status = response.status();
-      let error_text = response
-        .text()
+      let response = self
+        .client
+        .get(&url)
+        .header("Authorization", self.auth_header())
+        .header("Accept", "application/json")
+        .send()
         .await
-        .unwrap_or_else(|_| String::from("(no error details)"));
-      return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
+        .context("Failed to fetch attachments from Confluence API")?;
+
+      if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response
+          .text()
+          .await
+          .unwrap_or_else(|_| String::from("(no error details)"));
+        return Err(anyhow!("Confluence API returned error {status}: {error_text}"));
+      }
+
+      let attachments: AttachmentsResponse = response
+        .json()
+        .await
+        .context("Failed to parse attachments response from Confluence API")?;
+
+      all_attachments.extend(attachments.results);
+      next_url = attachments
+        .links
+        .and_then(|l| l.next)
+        .map(|next| format!("{}{next}", self.base_url));
     }
 
-    let attachments: AttachmentsResponse = response
-      .json()
-      .await
-      .context("Failed to parse attachments response from Confluence API")?;
-
-    Ok(attachments.results)
+    Ok(all_attachments)
   }
 
   async fn download_attachment(&self, url: &str, output_path: &std::path::Path) -> Result<()> {
