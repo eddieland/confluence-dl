@@ -1,6 +1,6 @@
 //! HTTP client implementation for talking to the Confluence REST API.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -13,6 +13,10 @@ use tokio::time::sleep;
 
 use super::api::ConfluenceApi;
 use super::models::{Attachment, AttachmentsResponse, ChildPagesResponse, Page, UserInfo};
+
+/// Maximum number of pagination requests before aborting, as a safeguard
+/// against infinite loops caused by cyclic or malformed `next` links.
+const MAX_PAGINATION_REQUESTS: usize = 1000;
 
 /// Confluence API client.
 #[derive(Clone)]
@@ -191,8 +195,21 @@ impl ConfluenceApi for ConfluenceClient {
     let initial_url = format!("{}/wiki/rest/api/content/{}/child/page", self.base_url, page_id);
     let mut all_pages = Vec::new();
     let mut next_url = Some(initial_url);
+    let mut seen_urls = HashSet::new();
+    let mut request_count: usize = 0;
 
     while let Some(url) = next_url {
+      if !seen_urls.insert(url.clone()) {
+        tracing::warn!("Pagination cycle detected for child pages of {page_id}, stopping");
+        break;
+      }
+
+      request_count += 1;
+      if request_count > MAX_PAGINATION_REQUESTS {
+        tracing::warn!("Pagination limit ({MAX_PAGINATION_REQUESTS}) reached for child pages of {page_id}, stopping");
+        break;
+      }
+
       self.rate_limiter.acquire().await;
 
       let response = self
@@ -222,7 +239,7 @@ impl ConfluenceApi for ConfluenceClient {
       next_url = child_pages
         .links
         .and_then(|l| l.next)
-        .map(|next| format!("{}{next}", self.base_url));
+        .map(|next| self.resolve_pagination_url(&next));
     }
 
     Ok(all_pages)
@@ -232,8 +249,21 @@ impl ConfluenceApi for ConfluenceClient {
     let initial_url = format!("{}/wiki/rest/api/content/{}/child/attachment", self.base_url, page_id);
     let mut all_attachments = Vec::new();
     let mut next_url = Some(initial_url);
+    let mut seen_urls = HashSet::new();
+    let mut request_count: usize = 0;
 
     while let Some(url) = next_url {
+      if !seen_urls.insert(url.clone()) {
+        tracing::warn!("Pagination cycle detected for attachments of {page_id}, stopping");
+        break;
+      }
+
+      request_count += 1;
+      if request_count > MAX_PAGINATION_REQUESTS {
+        tracing::warn!("Pagination limit ({MAX_PAGINATION_REQUESTS}) reached for attachments of {page_id}, stopping");
+        break;
+      }
+
       self.rate_limiter.acquire().await;
 
       let response = self
@@ -263,7 +293,7 @@ impl ConfluenceApi for ConfluenceClient {
       next_url = attachments
         .links
         .and_then(|l| l.next)
-        .map(|next| format!("{}{next}", self.base_url));
+        .map(|next| self.resolve_pagination_url(&next));
     }
 
     Ok(all_attachments)
@@ -346,6 +376,19 @@ impl ConfluenceApi for ConfluenceClient {
 }
 
 impl ConfluenceClient {
+  /// Resolve a pagination `next` link to a full URL.
+  ///
+  /// The Confluence API typically returns relative paths in pagination links,
+  /// but some instances may return absolute URLs. This method handles both
+  /// cases to avoid producing malformed URLs like `https://hosthttps://host/...`.
+  fn resolve_pagination_url(&self, next: &str) -> String {
+    if next.starts_with("http://") || next.starts_with("https://") {
+      return next.to_string();
+    }
+
+    format!("{}{next}", self.base_url)
+  }
+
   fn resolve_attachment_url(&self, url: &str) -> String {
     if url.starts_with("http://") || url.starts_with("https://") {
       return url.to_string();
@@ -459,5 +502,35 @@ mod tests {
       client.resolve_attachment_url(relative),
       "https://example.atlassian.net/wiki/download/attachments/12345/image.png"
     );
+  }
+
+  #[test]
+  fn resolve_pagination_url_prepends_base_for_relative_path() {
+    let client =
+      ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 5).unwrap();
+
+    let relative = "/wiki/rest/api/content/100/child/page?start=25&limit=25";
+    assert_eq!(
+      client.resolve_pagination_url(relative),
+      "https://example.atlassian.net/wiki/rest/api/content/100/child/page?start=25&limit=25"
+    );
+  }
+
+  #[test]
+  fn resolve_pagination_url_preserves_absolute_https_url() {
+    let client =
+      ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 5).unwrap();
+
+    let absolute = "https://example.atlassian.net/wiki/rest/api/content/100/child/page?start=25&limit=25";
+    assert_eq!(client.resolve_pagination_url(absolute), absolute);
+  }
+
+  #[test]
+  fn resolve_pagination_url_preserves_absolute_http_url() {
+    let client =
+      ConfluenceClient::new("https://example.atlassian.net", "user@example.com", "test-token", 30, 5).unwrap();
+
+    let absolute = "http://internal.example.com/wiki/rest/api/content/100/child/page?start=25&limit=25";
+    assert_eq!(client.resolve_pagination_url(absolute), absolute);
   }
 }
