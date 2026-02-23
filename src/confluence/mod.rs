@@ -12,7 +12,7 @@ pub use client::ConfluenceClient;
 #[allow(unused_imports)]
 pub use models::{
   Attachment, AttachmentLinks, AttachmentsResponse, ChildPagesResponse, Page, PageBody, PageLinks, PageSpace,
-  StorageFormat, UserInfo, ViewFormat,
+  PaginationLinks, StorageFormat, UserInfo, ViewFormat,
 };
 pub use tree::{PageTree, get_page_tree};
 pub use url::{UrlInfo, parse_confluence_url};

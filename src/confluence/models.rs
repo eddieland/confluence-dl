@@ -101,11 +101,24 @@ pub struct AttachmentLinks {
   pub download: Option<String>,
 }
 
+/// Pagination links returned alongside paginated API responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaginationLinks {
+  /// Relative URL for the next page of results, if any.
+  pub next: Option<String>,
+}
+
 /// Attachments response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttachmentsResponse {
   /// Attachments included in the API response page.
   pub results: Vec<Attachment>,
+  /// Number of items returned in this page.
+  #[serde(default)]
+  pub size: usize,
+  /// Pagination links for traversing result pages.
+  #[serde(rename = "_links")]
+  pub links: Option<PaginationLinks>,
 }
 
 /// Child pages response wrapper.
@@ -113,6 +126,12 @@ pub struct AttachmentsResponse {
 pub struct ChildPagesResponse {
   /// Child pages returned for the lookup request.
   pub results: Vec<Page>,
+  /// Number of items returned in this page.
+  #[serde(default)]
+  pub size: usize,
+  /// Pagination links for traversing result pages.
+  #[serde(rename = "_links")]
+  pub links: Option<PaginationLinks>,
 }
 
 /// User information from authentication test.
@@ -129,4 +148,79 @@ pub struct UserInfo {
   #[serde(rename = "publicName")]
   /// Publicly visible name, which may differ from `display_name`.
   pub public_name: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn child_pages_response_deserializes_with_pagination() {
+    let json = serde_json::json!({
+      "results": [
+        {"id": "1", "title": "Child 1", "type": "page", "status": "current"},
+        {"id": "2", "title": "Child 2", "type": "page", "status": "current"}
+      ],
+      "size": 2,
+      "_links": {
+        "next": "/wiki/rest/api/content/100/child/page?start=2&limit=2"
+      }
+    });
+
+    let response: ChildPagesResponse = serde_json::from_value(json).unwrap();
+    assert_eq!(response.results.len(), 2);
+    assert_eq!(response.size, 2);
+    let next = response.links.unwrap().next.unwrap();
+    assert_eq!(next, "/wiki/rest/api/content/100/child/page?start=2&limit=2");
+  }
+
+  #[test]
+  fn child_pages_response_deserializes_without_next_link() {
+    let json = serde_json::json!({
+      "results": [
+        {"id": "1", "title": "Only Child", "type": "page", "status": "current"}
+      ],
+      "size": 1,
+      "_links": {}
+    });
+
+    let response: ChildPagesResponse = serde_json::from_value(json).unwrap();
+    assert_eq!(response.results.len(), 1);
+    assert!(response.links.unwrap().next.is_none());
+  }
+
+  #[test]
+  fn child_pages_response_deserializes_without_links() {
+    let json = serde_json::json!({
+      "results": []
+    });
+
+    let response: ChildPagesResponse = serde_json::from_value(json).unwrap();
+    assert!(response.results.is_empty());
+    assert_eq!(response.size, 0);
+    assert!(response.links.is_none());
+  }
+
+  #[test]
+  fn attachments_response_deserializes_with_pagination() {
+    let json = serde_json::json!({
+      "results": [
+        {
+          "id": "att1",
+          "title": "doc.pdf",
+          "type": "attachment",
+          "_links": {"download": "/wiki/download/att1"}
+        }
+      ],
+      "size": 1,
+      "_links": {
+        "next": "/wiki/rest/api/content/100/child/attachment?start=25&limit=25"
+      }
+    });
+
+    let response: AttachmentsResponse = serde_json::from_value(json).unwrap();
+    assert_eq!(response.results.len(), 1);
+    let next = response.links.unwrap().next.unwrap();
+    assert!(next.contains("start=25"));
+  }
 }
