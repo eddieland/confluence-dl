@@ -16,7 +16,9 @@ use crate::asciidoc::AsciiDocOptions;
 use crate::cli::Cli;
 use crate::color::ColorScheme;
 use crate::commands::auth::load_credentials;
+use crate::commands::ls::format_tree_lines;
 use crate::confluence::{self, ConfluenceApi};
+use crate::export_summary::{ExportStats, format_output_tree, format_single_page_output};
 use crate::format::OutputFormat;
 use crate::markdown::MarkdownOptions;
 use crate::processed_page::{ProcessOptions, process_page, write_processed_page};
@@ -51,9 +53,8 @@ pub async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorSch
     println!(
       "\n{} {}",
       colors.warning("⚠"),
-      colors.warning("DRY RUN: No files will be downloaded")
+      colors.warning("DRY RUN: Previewing without downloading")
     );
-    return;
   }
 
   // Parse the input to extract page ID and base URL
@@ -62,8 +63,6 @@ pub async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorSch
     eprintln!("  {}: {}", colors.emphasis("Error"), e);
     process::exit(1);
   }
-
-  println!("\n{} {}", colors.success("✓"), colors.success("Download complete"));
 }
 
 /// Download a single Confluence page (optionally with attachments/children).
@@ -138,6 +137,28 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
       if total_pages == 1 { "page" } else { "pages" }
     );
 
+    let output_dir = Path::new(&cli.output.output);
+
+    // Dry-run: show preview and exit without downloading
+    if cli.behavior.dry_run {
+      println!("\n{}", colors.emphasis("Page tree"));
+      for line in format_tree_lines(&tree, colors) {
+        println!("  {line}");
+      }
+
+      println!("\n{} {}", colors.info("→"), colors.info("Planned output structure"));
+      for line in format_output_tree(&tree, output_dir, cli.output.format, colors) {
+        println!("  {line}");
+      }
+
+      println!(
+        "\n{} {}",
+        colors.warning("⚠"),
+        colors.warning("DRY RUN: No files were written")
+      );
+      return Ok(());
+    }
+
     // Download the entire tree
     println!("\n{} {}", colors.info("→"), colors.info("Downloading pages"));
     if cli.behavior.verbose > 0 {
@@ -148,10 +169,11 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
         colors.number(parallel_label)
       );
     }
-    let output_dir = Path::new(&cli.output.output);
     let parallel_limit = cli.performance.resolved_parallel();
     let semaphore = Arc::new(Semaphore::new(parallel_limit));
-    download_page_tree(&client, &tree, output_dir, cli, colors, semaphore).await?;
+    let stats = Arc::new(ExportStats::new());
+    download_page_tree(&client, &tree, output_dir, cli, colors, semaphore, Arc::clone(&stats)).await?;
+    stats.print_summary(colors);
 
     return Ok(());
   }
@@ -176,6 +198,26 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
   }
 
   let output_dir = Path::new(&cli.output.output);
+
+  // Dry-run: show preview and exit without downloading
+  if cli.behavior.dry_run {
+    println!(
+      "\n{} {}",
+      colors.info("→"),
+      colors.info("Planned output")
+    );
+    println!(
+      "  {}",
+      format_single_page_output(&page.title, output_dir, cli.output.format, colors)
+    );
+
+    println!(
+      "\n{} {}",
+      colors.warning("⚠"),
+      colors.warning("DRY RUN: No files were written")
+    );
+    return Ok(());
+  }
 
   // Convert to target format
   let format_name = match cli.output.format {
@@ -238,6 +280,13 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
   let output_path = write_processed_page(&processed, output_dir, cli.output.format, cli.output.overwrite)?;
   println!("  {}: {}", colors.emphasis("File"), colors.path(output_path.display()));
 
+  // Show export summary for single page
+  let stats = ExportStats::new();
+  stats.record_page();
+  stats.record_images(processed.images.len());
+  stats.record_attachments(processed.attachments.len());
+  stats.print_summary(colors);
+
   Ok(())
 }
 
@@ -269,6 +318,7 @@ fn download_page_tree<'a>(
   cli: &'a Cli,
   colors: &'a ColorScheme,
   semaphore: Arc<Semaphore>,
+  stats: Arc<ExportStats>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + 'a + Send>> {
   Box::pin(async move {
     let permit = semaphore
@@ -302,6 +352,11 @@ fn download_page_tree<'a>(
       println!("    {}", colors.dimmed("No attachments found"));
     }
 
+    // Record stats before writing
+    stats.record_page();
+    stats.record_images(processed.images.len());
+    stats.record_attachments(processed.attachments.len());
+
     // Write processed page to disk (I/O phase)
     let output_path = write_processed_page(&processed, output_dir, cli.output.format, cli.output.overwrite)?;
 
@@ -319,10 +374,17 @@ fn download_page_tree<'a>(
       fs::create_dir_all(&child_dir)
         .with_context(|| format!("Failed to create directory for child pages at {}", child_dir.display()))?;
 
-      let child_futures = tree
-        .children
-        .iter()
-        .map(|child_tree| download_page_tree(client, child_tree, &child_dir, cli, colors, Arc::clone(&semaphore)));
+      let child_futures = tree.children.iter().map(|child_tree| {
+        download_page_tree(
+          client,
+          child_tree,
+          &child_dir,
+          cli,
+          colors,
+          Arc::clone(&semaphore),
+          Arc::clone(&stats),
+        )
+      });
 
       for result in join_all(child_futures).await {
         result?;
@@ -397,6 +459,7 @@ mod tests {
   use crate::confluence::{
     Attachment, AttachmentLinks, ConfluenceApi, Page, PageBody, PageTree, StorageFormat, UserInfo,
   };
+  use crate::export_summary::ExportStats;
 
   struct CountingClient {
     attachments: HashMap<String, Vec<Attachment>>,
@@ -589,13 +652,16 @@ mod tests {
     };
 
     let semaphore = Arc::new(Semaphore::new(cli.performance.resolved_parallel()));
-    download_page_tree(&client, &tree, output_dir, &cli, &colors, semaphore)
+    let stats = Arc::new(ExportStats::new());
+    download_page_tree(&client, &tree, output_dir, &cli, &colors, semaphore, Arc::clone(&stats))
       .await
       .expect("download should succeed");
 
     let raw_file = output_dir.join("Root Page.raw.xml");
     assert!(raw_file.exists(), "raw storage file should be created");
     assert_eq!(fs::read_to_string(&raw_file).unwrap(), "<p>Example</p>");
+
+    assert_eq!(stats.pages(), 1, "should record 1 page");
   }
 
   #[tokio::test]
@@ -663,12 +729,16 @@ mod tests {
 
     let limit = cli.performance.resolved_parallel();
     let semaphore = Arc::new(Semaphore::new(limit));
-    download_page_tree(&client, &tree, output_path, &cli, &colors, semaphore)
+    let stats = Arc::new(ExportStats::new());
+    download_page_tree(&client, &tree, output_path, &cli, &colors, semaphore, Arc::clone(&stats))
       .await
       .expect("download should succeed");
 
     let max = *max_counter.lock().await;
     assert!(max <= limit, "observed concurrency {max} exceeds limit {}", limit);
+
+    // Verify stats were recorded
+    assert_eq!(stats.pages(), 5, "should record 5 pages (root + 4 children)");
 
     // Ensure files were written for each page.
     let expected_files: Vec<PathBuf> = vec![

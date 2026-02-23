@@ -10,6 +10,7 @@ pub mod color;
 pub mod commands;
 pub mod confluence;
 pub mod credentials;
+pub mod export_summary;
 pub mod format;
 pub mod images;
 pub mod markdown;

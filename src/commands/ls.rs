@@ -108,7 +108,7 @@ fn resolve_url_info(target: &str, cli: &Cli) -> Result<confluence::UrlInfo> {
   ))
 }
 
-fn format_tree_lines(tree: &PageTree, colors: &ColorScheme) -> Vec<String> {
+pub(crate) fn format_tree_lines(tree: &PageTree, colors: &ColorScheme) -> Vec<String> {
   let mut lines = Vec::new();
   format_tree_lines_recursive(tree, String::new(), true, true, colors, &mut lines);
   lines
