@@ -14,7 +14,7 @@ chrono = "0.4.43"
 clap = { version = "4.5.58", features = ["derive", "env", "color"] }
 clap_complete = { version = "4.5.66", features = ["unstable-dynamic"] }
 futures = "0.3.32"
-owo-colors = { version = "4.2.3", features = ["supports-colors"] }
+owo-colors = { version = "4.3.0", features = ["supports-colors"] }
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
 roxmltree = "0.21.1"
 serde = { version = "1.0.228", features = ["derive"] }
