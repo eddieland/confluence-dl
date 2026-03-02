@@ -7,11 +7,11 @@ description = "CLI for exporting Confluence spaces and pages to Markdown"
 repository = "https://github.com/eddieland/confluence-dl"
 
 [dependencies]
-anyhow = "1.0.101"
+anyhow = "1.0.102"
 async-trait = "0.1.89"
 base64 = "0.22.1"
-chrono = "0.4.43"
-clap = { version = "4.5.58", features = ["derive", "env", "color"] }
+chrono = "0.4.44"
+clap = { version = "4.5.60", features = ["derive", "env", "color"] }
 clap_complete = { version = "4.5.66", features = ["unstable-dynamic"] }
 futures = "0.3.32"
 owo-colors = { version = "4.2.3", features = ["supports-colors"] }
