@@ -11,6 +11,7 @@ use std::io::{ErrorKind, Write as IoWrite};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use futures::future::try_join_all;
 
 use crate::asciidoc::{self, AsciiDocOptions};
 use crate::attachments::{self, ATTACHMENTS_DIR, DownloadedAttachment};
@@ -268,15 +269,22 @@ async fn fetch_images_from_attachments(
   output_dir: Option<&Path>,
   overwrite: bool,
 ) -> Result<(Vec<AssetData>, HashMap<String, PathBuf>)> {
-  let mut assets = Vec::new();
   let mut filename_map = HashMap::new();
 
   if image_refs.is_empty() {
-    return Ok((assets, filename_map));
+    return Ok((Vec::new(), filename_map));
   }
 
+  // Phase 1: Pre-compute metadata for all images
+  struct ImageFetchTask {
+    image_filename: String,
+    download_url: String,
+    relative_path: PathBuf,
+    needs_fetch: bool,
+  }
+
+  let mut tasks = Vec::new();
   for image_ref in image_refs {
-    // Find the attachment matching this image
     let attachment = attachments
       .iter()
       .find(|a| a.title == image_ref.filename)
@@ -288,32 +296,50 @@ async fn fetch_images_from_attachments(
       .and_then(|l| l.download.as_ref())
       .with_context(|| format!("No download link for attachment: {}", image_ref.filename))?;
 
-    // Sanitize filename and build relative path
     let safe_filename = sanitize_asset_filename(&image_ref.filename);
     let relative_path = PathBuf::from(images_subdir).join(&safe_filename);
 
-    // Skip fetching if file already exists and we're not overwriting
-    if let Some(dir) = output_dir {
+    let needs_fetch = if let Some(dir) = output_dir {
       let full_path = dir.join(&relative_path);
-      if full_path.exists() && !overwrite {
-        // Still add to filename_map so links get rewritten correctly
-        filename_map.insert(image_ref.filename.clone(), relative_path);
-        continue;
-      }
-    }
-
-    // Fetch the image bytes
-    let bytes = client
-      .fetch_attachment(download_url)
-      .await
-      .with_context(|| format!("Failed to fetch image: {}", image_ref.filename))?;
+      overwrite || !full_path.exists()
+    } else {
+      true
+    };
 
     filename_map.insert(image_ref.filename.clone(), relative_path.clone());
-    assets.push(AssetData {
-      relative_path,
-      content: bytes,
-    });
+
+    if needs_fetch {
+      tasks.push(ImageFetchTask {
+        image_filename: image_ref.filename.clone(),
+        download_url: download_url.clone(),
+        relative_path,
+        needs_fetch: true,
+      });
+    }
   }
+
+  // Phase 2: Fetch all needed images concurrently
+  let fetch_futures: Vec<_> = tasks
+    .iter()
+    .filter(|t| t.needs_fetch)
+    .map(|task| {
+      let url = task.download_url.clone();
+      let filename = task.image_filename.clone();
+      let path = task.relative_path.clone();
+      async move {
+        let bytes = client
+          .fetch_attachment(&url)
+          .await
+          .with_context(|| format!("Failed to fetch image: {filename}"))?;
+        Ok::<_, anyhow::Error>(AssetData {
+          relative_path: path,
+          content: bytes,
+        })
+      }
+    })
+    .collect();
+
+  let assets = try_join_all(fetch_futures).await?;
 
   Ok((assets, filename_map))
 }
@@ -330,17 +356,24 @@ async fn fetch_attachments_from_list(
   output_dir: Option<&Path>,
   overwrite: bool,
 ) -> Result<(Vec<AssetData>, Vec<DownloadedAttachment>)> {
-  let mut assets = Vec::new();
   let mut downloaded_info = Vec::new();
 
   if attachments.is_empty() {
-    return Ok((assets, downloaded_info));
+    return Ok((Vec::new(), downloaded_info));
   }
 
+  // Phase 1: Pre-compute metadata (sequential for filename deduplication)
+  struct AttachmentFetchTask {
+    original_name: String,
+    download_url: String,
+    relative_path: PathBuf,
+    needs_fetch: bool,
+  }
+
+  let mut tasks = Vec::new();
   let mut used_filenames = HashSet::new();
 
   for attachment in attachments {
-    // Skip if this attachment was already downloaded as an image
     if let Some(skip) = skip_titles
       && skip.contains(&attachment.title)
     {
@@ -352,7 +385,6 @@ async fn fetch_attachments_from_list(
       None => continue,
     };
 
-    // Sanitize and deduplicate filename
     let sanitized = sanitize_asset_filename(&attachment.title);
     let (base, ext) = split_name_and_extension(&sanitized);
     let mut filename = sanitized.clone();
@@ -366,35 +398,50 @@ async fn fetch_attachments_from_list(
 
     let relative_path = PathBuf::from(ATTACHMENTS_DIR).join(&filename);
 
-    // Skip fetching if file already exists and we're not overwriting
-    if let Some(dir) = output_dir {
+    let needs_fetch = if let Some(dir) = output_dir {
       let full_path = dir.join(&relative_path);
-      if full_path.exists() && !overwrite {
-        // Still add to downloaded_info so links get rewritten correctly
-        downloaded_info.push(DownloadedAttachment {
-          original_name: attachment.title.clone(),
-          relative_path,
-        });
-        continue;
-      }
-    }
-
-    // Fetch the attachment bytes
-    let bytes = client
-      .fetch_attachment(download_url)
-      .await
-      .with_context(|| format!("Failed to fetch attachment: {}", attachment.title))?;
+      overwrite || !full_path.exists()
+    } else {
+      true
+    };
 
     downloaded_info.push(DownloadedAttachment {
       original_name: attachment.title.clone(),
       relative_path: relative_path.clone(),
     });
 
-    assets.push(AssetData {
-      relative_path,
-      content: bytes,
-    });
+    if needs_fetch {
+      tasks.push(AttachmentFetchTask {
+        original_name: attachment.title.clone(),
+        download_url: download_url.clone(),
+        relative_path,
+        needs_fetch: true,
+      });
+    }
   }
+
+  // Phase 2: Fetch all needed attachments concurrently
+  let fetch_futures: Vec<_> = tasks
+    .iter()
+    .filter(|t| t.needs_fetch)
+    .map(|task| {
+      let url = task.download_url.clone();
+      let name = task.original_name.clone();
+      let path = task.relative_path.clone();
+      async move {
+        let bytes = client
+          .fetch_attachment(&url)
+          .await
+          .with_context(|| format!("Failed to fetch attachment: {name}"))?;
+        Ok::<_, anyhow::Error>(AssetData {
+          relative_path: path,
+          content: bytes,
+        })
+      }
+    })
+    .collect();
+
+  let assets = try_join_all(fetch_futures).await?;
 
   Ok((assets, downloaded_info))
 }
