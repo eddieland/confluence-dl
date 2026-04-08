@@ -211,41 +211,9 @@ fn is_valid_prefix(prefix: &str) -> bool {
 
 /// Replaces common HTML entities with Unicode characters before XML parsing.
 ///
-/// `roxmltree` only recognizes XML's predefined entities (`&lt;`, `&gt;`,
-/// `&amp;`, `&quot;`, `&apos;`). Confluence storage content frequently includes
-/// the broader HTML entity set, so we normalize them before parsing.
-///
-/// # Arguments
-/// * `text` - Raw storage format markup that may contain HTML entities.
-///
-/// # Returns
-/// A `String` with known HTML entities replaced by their Unicode equivalents.
+/// Delegates to the shared implementation in the markdown module.
 fn preprocess_html_entities(text: &str) -> String {
-  text
-    .replace("&nbsp;", "\u{00A0}") // non-breaking space
-    .replace("&ndash;", "\u{2013}") // en dash
-    .replace("&mdash;", "\u{2014}") // em dash
-    .replace("&ldquo;", "\u{201C}") // left double quote
-    .replace("&rdquo;", "\u{201D}") // right double quote
-    .replace("&lsquo;", "\u{2018}") // left single quote
-    .replace("&rsquo;", "\u{2019}") // right single quote
-    .replace("&hellip;", "\u{2026}") // horizontal ellipsis
-    .replace("&bull;", "\u{2022}") // bullet
-    .replace("&middot;", "\u{00B7}") // middle dot
-    .replace("&deg;", "\u{00B0}") // degree sign
-    .replace("&copy;", "\u{00A9}") // copyright
-    .replace("&reg;", "\u{00AE}") // registered trademark
-    .replace("&trade;", "\u{2122}") // trademark
-    .replace("&times;", "\u{00D7}") // multiplication sign
-    .replace("&divide;", "\u{00F7}") // division sign
-    .replace("&plusmn;", "\u{00B1}") // plus-minus sign
-    .replace("&ne;", "\u{2260}") // not equal
-    .replace("&le;", "\u{2264}") // less than or equal
-    .replace("&ge;", "\u{2265}") // greater than or equal
-    .replace("&larr;", "\u{2190}") // leftwards arrow
-    .replace("&rarr;", "\u{2192}") // rightwards arrow
-    .replace("&uarr;", "\u{2191}") // upwards arrow
-    .replace("&darr;", "\u{2193}") // downwards arrow
+  crate::markdown::html_entities::preprocess_html_entities(text)
 }
 
 /// Downloads images referenced in page content and writes them to disk.
