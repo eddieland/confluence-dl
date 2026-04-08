@@ -15,7 +15,7 @@
 /// # Returns
 /// A `String` with common HTML entities replaced by literal characters.
 pub fn preprocess_html_entities(text: &str) -> String {
-  text
+  let text = text
     .replace("&nbsp;", "\u{00A0}") // non-breaking space
     .replace("&ndash;", "\u{2013}") // en dash
     .replace("&mdash;", "\u{2014}") // em dash
@@ -40,6 +40,72 @@ pub fn preprocess_html_entities(text: &str) -> String {
     .replace("&rarr;", "\u{2192}") // rightwards arrow
     .replace("&uarr;", "\u{2191}") // upwards arrow
     .replace("&darr;", "\u{2193}") // downwards arrow
+    .replace("&dagger;", "\u{2020}") // dagger
+    .replace("&Dagger;", "\u{2021}") // double dagger
+    .replace("&sect;", "\u{00A7}") // section sign
+    .replace("&para;", "\u{00B6}") // paragraph/pilcrow
+    .replace("&micro;", "\u{00B5}") // micro sign
+    .replace("&cent;", "\u{00A2}") // cent sign
+    .replace("&pound;", "\u{00A3}") // pound sign
+    .replace("&yen;", "\u{00A5}") // yen sign
+    .replace("&euro;", "\u{20AC}") // euro sign
+    .replace("&iexcl;", "\u{00A1}") // inverted exclamation mark
+    .replace("&iquest;", "\u{00BF}") // inverted question mark
+    .replace("&laquo;", "\u{00AB}") // left-pointing double angle quote
+    .replace("&raquo;", "\u{00BB}") // right-pointing double angle quote
+    .replace("&frac14;", "\u{00BC}") // fraction one quarter
+    .replace("&frac12;", "\u{00BD}") // fraction one half
+    .replace("&frac34;", "\u{00BE}") // fraction three quarters
+    .replace("&sup1;", "\u{00B9}") // superscript one
+    .replace("&sup2;", "\u{00B2}") // superscript two
+    .replace("&sup3;", "\u{00B3}"); // superscript three
+
+  // Escape any remaining unknown named entities so roxmltree doesn't fail.
+  // XML only recognizes 5 predefined entities (lt, gt, amp, quot, apos).
+  // Any other `&name;` left after our replacements would cause a parse error,
+  // so we escape the `&` to `&amp;` turning them into literal text.
+  escape_unknown_named_entities(&text)
+}
+
+/// Escape any remaining `&name;` references that aren't one of XML's five
+/// predefined entities (`lt`, `gt`, `amp`, `quot`, `apos`).
+///
+/// Replaces the leading `&` with `&amp;` so the text passes through the XML
+/// parser as literal content instead of triggering an "unknown entity" error.
+fn escape_unknown_named_entities(text: &str) -> String {
+  let xml_entities = ["lt", "gt", "amp", "quot", "apos"];
+  let mut result = String::with_capacity(text.len());
+  let mut remaining = text;
+
+  while let Some(amp_pos) = remaining.find('&') {
+    result.push_str(&remaining[..amp_pos]);
+
+    let after_amp = &remaining[amp_pos + 1..];
+    if let Some(semi_pos) = after_amp.find(';') {
+      let entity_name = &after_amp[..semi_pos];
+      // Numeric entities (&#123; or &#x1F44B;) are handled by roxmltree — leave them alone.
+      if entity_name.starts_with('#') || xml_entities.contains(&entity_name) {
+        result.push('&');
+        result.push_str(&after_amp[..=semi_pos]);
+      } else if !entity_name.is_empty() && entity_name.chars().all(|c| c.is_ascii_alphanumeric()) {
+        // Unknown named entity — escape the ampersand so it becomes literal text.
+        result.push_str("&amp;");
+        result.push_str(&after_amp[..=semi_pos]);
+      } else {
+        // Not a valid entity pattern — pass through as-is.
+        result.push('&');
+        result.push_str(&after_amp[..=semi_pos]);
+      }
+      remaining = &after_amp[semi_pos + 1..];
+    } else {
+      // No closing `;` found — bare `&`, just pass it through.
+      result.push('&');
+      remaining = after_amp;
+    }
+  }
+
+  result.push_str(remaining);
+  result
 }
 
 /// Decode common HTML entities to their Unicode equivalents.
@@ -156,5 +222,35 @@ mod tests {
     let input = "&nbsp;&rsquo;&lsquo;&rdquo;&ldquo;&mdash;&ndash;&amp;&lt;&gt;&quot;&rarr;&larr;&#39;";
     let output = decode_html_entities(input);
     assert_eq!(output, " ''\"\"—–&<>\"→←'");
+  }
+
+  #[test]
+  fn test_preprocess_dagger_entity() {
+    let input = "see note&dagger; and also&Dagger;";
+    let output = preprocess_html_entities(input);
+    assert_eq!(output, "see note\u{2020} and also\u{2021}");
+  }
+
+  #[test]
+  fn test_preprocess_escapes_unknown_entities() {
+    // Unknown named entities should be escaped so roxmltree doesn't fail.
+    let input = "some &obscure; entity";
+    let output = preprocess_html_entities(input);
+    assert_eq!(output, "some &amp;obscure; entity");
+  }
+
+  #[test]
+  fn test_preprocess_preserves_xml_entities() {
+    // XML predefined entities must not be escaped.
+    let input = "&lt;b&gt;bold&lt;/b&gt; &amp; &quot;quoted&quot;";
+    let output = preprocess_html_entities(input);
+    assert_eq!(output, "&lt;b&gt;bold&lt;/b&gt; &amp; &quot;quoted&quot;");
+  }
+
+  #[test]
+  fn test_preprocess_preserves_numeric_entities() {
+    let input = "emoji &#128075; and hex &#x1F642;";
+    let output = preprocess_html_entities(input);
+    assert_eq!(output, "emoji &#128075; and hex &#x1F642;");
   }
 }
