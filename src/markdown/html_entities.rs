@@ -305,37 +305,38 @@ pub fn preprocess_html_entities(text: &str) -> String {
       .position(|&b| b == b';' || b == b'&' || b == b'<' || b == b' ' || b == b'\n');
 
     if let Some(semi_pos) = maybe_semi
-      && after_amp.as_bytes()[semi_pos] == b';' {
-        let candidate = &after_amp[..semi_pos];
+      && after_amp.as_bytes()[semi_pos] == b';'
+    {
+      let candidate = &after_amp[..semi_pos];
 
-        // Numeric entities (#dec or #xHex) – pass through for roxmltree
-        if candidate.starts_with('#') {
-          result.push('&');
-          remaining = after_amp;
-          continue;
-        }
-
-        // XML's 5 predefined entities – pass through
-        if matches!(candidate, "amp" | "lt" | "gt" | "quot" | "apos") {
-          result.push('&');
-          remaining = after_amp;
-          continue;
-        }
-
-        // Named HTML entity – look up in table
-        if !candidate.is_empty() && candidate.chars().all(|c| c.is_ascii_alphanumeric()) {
-          if let Some(&ch) = ENTITY_MAP.get(candidate) {
-            result.push(ch);
-            remaining = &after_amp[semi_pos + 1..];
-            continue;
-          }
-          // Unknown named entity – escape ampersand to prevent XML parse failure
-          tracing::warn!("Escaping unrecognised HTML entity: &{candidate};");
-          result.push_str("&amp;");
-          remaining = after_amp;
-          continue;
-        }
+      // Numeric entities (#dec or #xHex) – pass through for roxmltree
+      if candidate.starts_with('#') {
+        result.push('&');
+        remaining = after_amp;
+        continue;
       }
+
+      // XML's 5 predefined entities – pass through
+      if matches!(candidate, "amp" | "lt" | "gt" | "quot" | "apos") {
+        result.push('&');
+        remaining = after_amp;
+        continue;
+      }
+
+      // Named HTML entity – look up in table
+      if !candidate.is_empty() && candidate.chars().all(|c| c.is_ascii_alphanumeric()) {
+        if let Some(&ch) = ENTITY_MAP.get(candidate) {
+          result.push(ch);
+          remaining = &after_amp[semi_pos + 1..];
+          continue;
+        }
+        // Unknown named entity – escape ampersand to prevent XML parse failure
+        tracing::warn!("Escaping unrecognised HTML entity: &{candidate};");
+        result.push_str("&amp;");
+        remaining = after_amp;
+        continue;
+      }
+    }
 
     // Not a recognised pattern – keep the '&' as-is
     result.push('&');
