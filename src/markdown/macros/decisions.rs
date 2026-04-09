@@ -772,10 +772,9 @@ fn collect_adf_inline(node: Node, buffer: &mut String) {
           let value = get_element_text(node);
           match key.to_ascii_lowercase().as_str() {
             "text" | "title" | "emoji-fallback" => append_inline_text(buffer, &value),
-            "emoji-shortname"
-              if !value.trim().is_empty() => {
-                append_inline_text(buffer, &value);
-              }
+            "emoji-shortname" if !value.trim().is_empty() => {
+              append_inline_text(buffer, &value);
+            }
             _ => {}
           }
         }
