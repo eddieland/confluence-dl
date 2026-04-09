@@ -324,14 +324,14 @@ pub fn preprocess_html_entities(text: &str) -> String {
       }
 
       // Named HTML entity – look up in table
-      if !candidate.is_empty() && candidate.chars().all(|c| c.is_ascii_alphanumeric()) {
+      if !candidate.is_empty() && candidate.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         if let Some(&ch) = ENTITY_MAP.get(candidate) {
           result.push(ch);
           remaining = &after_amp[semi_pos + 1..];
           continue;
         }
         // Unknown named entity – escape ampersand to prevent XML parse failure
-        tracing::warn!("Escaping unrecognised HTML entity: &{candidate};");
+        tracing::debug!("Escaping unrecognised HTML entity: &{candidate};");
         result.push_str("&amp;");
         remaining = after_amp;
         continue;
