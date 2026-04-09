@@ -280,7 +280,6 @@ async fn fetch_images_from_attachments(
     image_filename: String,
     download_url: String,
     relative_path: PathBuf,
-    needs_fetch: bool,
   }
 
   let mut tasks = Vec::new();
@@ -313,7 +312,6 @@ async fn fetch_images_from_attachments(
         image_filename: image_ref.filename.clone(),
         download_url: download_url.clone(),
         relative_path,
-        needs_fetch: true,
       });
     }
   }
@@ -321,7 +319,6 @@ async fn fetch_images_from_attachments(
   // Phase 2: Fetch all needed images concurrently
   let fetch_futures: Vec<_> = tasks
     .iter()
-    .filter(|t| t.needs_fetch)
     .map(|task| {
       let url = task.download_url.clone();
       let filename = task.image_filename.clone();
@@ -367,7 +364,6 @@ async fn fetch_attachments_from_list(
     original_name: String,
     download_url: String,
     relative_path: PathBuf,
-    needs_fetch: bool,
   }
 
   let mut tasks = Vec::new();
@@ -415,7 +411,6 @@ async fn fetch_attachments_from_list(
         original_name: attachment.title.clone(),
         download_url: download_url.clone(),
         relative_path,
-        needs_fetch: true,
       });
     }
   }
@@ -423,7 +418,6 @@ async fn fetch_attachments_from_list(
   // Phase 2: Fetch all needed attachments concurrently
   let fetch_futures: Vec<_> = tasks
     .iter()
-    .filter(|t| t.needs_fetch)
     .map(|task| {
       let url = task.download_url.clone();
       let name = task.original_name.clone();

@@ -3,10 +3,11 @@
 use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use futures::future::join_all;
+use tokio::sync::Mutex;
 
 use super::api::ConfluenceApi;
 use super::models::Page;
@@ -72,7 +73,7 @@ fn get_page_tree_recursive<'a>(
 ) -> Pin<Box<dyn Future<Output = Result<PageTree>> + Send + 'a>> {
   Box::pin(async move {
     {
-      let mut vis = visited.lock().expect("visited lock poisoned");
+      let mut vis = visited.lock().await;
       if vis.contains(&page_id) {
         return Err(anyhow!("Circular reference detected: page {page_id} already visited"));
       }
