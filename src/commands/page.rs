@@ -161,8 +161,8 @@ async fn download_page(page_input: &str, cli: &Cli, colors: &ColorScheme) -> any
   let page = client.get_page(&url_info.page_id).await?;
 
   println!("  {}: {}", colors.emphasis("Title"), colors.emphasis(&page.title));
-  println!("  {}: {}", colors.emphasis("Type"), &page.page_type);
-  println!("  {}: {}", colors.emphasis("Status"), &page.status);
+  println!("  {}: {}", colors.emphasis("Type"), page.page_type);
+  println!("  {}: {}", colors.emphasis("Status"), page.status);
 
   // Get storage content for size display
   if cli.behavior.verbose > 0

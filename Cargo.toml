@@ -1,6 +1,6 @@
 [package]
 name = "confluence-dl"
-version = "0.6.1"
+version = "0.7.0"
 edition = "2024"
 authors = ["Edward Jones <e@eddie.land>"]
 description = "CLI for exporting Confluence spaces and pages to Markdown"
@@ -11,23 +11,23 @@ anyhow = "1.0.102"
 async-trait = "0.1.89"
 base64 = "0.22.1"
 chrono = "0.4.44"
-clap = { version = "4.5.58", features = ["derive", "env", "color"] }
-clap_complete = { version = "4.5.66", features = ["unstable-dynamic"] }
+clap = { version = "4.6.1", features = ["derive", "env", "color"] }
+clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
 futures = "0.3.32"
-owo-colors = { version = "4.2.3", features = ["supports-colors"] }
-reqwest = { version = "0.12.28", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
+owo-colors = { version = "4.3.0", features = ["supports-colors"] }
+reqwest = { version = "0.13.3", default-features = false, features = ["json", "stream", "rustls"] }
 roxmltree = "0.21.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-tokio = { version = "1.51.1", features = ["fs", "macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1.52.2", features = ["fs", "macros", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 unicode-width = "0.2.2"
 url = "2.5.8"
 
 [dev-dependencies]
-insta = "1.46.3"
-tempfile = "3.25.0"
+insta = "1.47.2"
+tempfile = "3.27.0"
 
 [lib]
 name = "confluence_dl"
