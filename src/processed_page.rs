@@ -11,7 +11,7 @@ use std::io::{ErrorKind, Write as IoWrite};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use futures::future::try_join_all;
+use futures::future::join_all;
 
 use crate::asciidoc::{self, AsciiDocOptions};
 use crate::attachments::{self, ATTACHMENTS_DIR, DownloadedAttachment};
@@ -324,19 +324,30 @@ async fn fetch_images_from_attachments(
       let filename = task.image_filename.clone();
       let path = task.relative_path.clone();
       async move {
-        let bytes = client
+        client
           .fetch_attachment(&url)
           .await
-          .with_context(|| format!("Failed to fetch image: {filename}"))?;
-        Ok::<_, anyhow::Error>(AssetData {
-          relative_path: path,
-          content: bytes,
-        })
+          .map(|bytes| AssetData {
+            relative_path: path,
+            content: bytes,
+          })
+          .map_err(|e| (filename, e))
       }
     })
     .collect();
 
-  let assets = try_join_all(fetch_futures).await?;
+  let results = join_all(fetch_futures).await;
+
+  let mut assets = Vec::with_capacity(results.len());
+  for result in results {
+    match result {
+      Ok(asset) => assets.push(asset),
+      Err((filename, e)) => {
+        tracing::warn!("Skipping image '{}': {:#}", filename, e);
+        filename_map.remove(&filename);
+      }
+    }
+  }
 
   Ok((assets, filename_map))
 }
@@ -423,19 +434,31 @@ async fn fetch_attachments_from_list(
       let name = task.original_name.clone();
       let path = task.relative_path.clone();
       async move {
-        let bytes = client
+        client
           .fetch_attachment(&url)
           .await
-          .with_context(|| format!("Failed to fetch attachment: {name}"))?;
-        Ok::<_, anyhow::Error>(AssetData {
-          relative_path: path,
-          content: bytes,
-        })
+          .map(|bytes| AssetData {
+            relative_path: path,
+            content: bytes,
+          })
+          .map_err(|e| (name, e))
       }
     })
     .collect();
 
-  let assets = try_join_all(fetch_futures).await?;
+  let results = join_all(fetch_futures).await;
+
+  let mut assets = Vec::with_capacity(results.len());
+  for result in results {
+    match result {
+      Ok(asset) => assets.push(asset),
+      Err((name, e)) => {
+        tracing::warn!("Skipping attachment '{}': {:#}", name, e);
+        // Remove this attachment from downloaded_info so links aren't rewritten
+        downloaded_info.retain(|info| info.original_name != name);
+      }
+    }
+  }
 
   Ok((assets, downloaded_info))
 }

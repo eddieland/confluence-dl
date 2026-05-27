@@ -59,7 +59,7 @@ pub async fn handle_page_download(page_input: &str, cli: &Cli, colors: &ColorSch
   // Parse the input to extract page ID and base URL
   if let Err(e) = download_page(page_input, cli, colors).await {
     eprintln!("{} {}", colors.error("✗"), colors.error("Failed to download page"));
-    eprintln!("  {}: {}", colors.emphasis("Error"), e);
+    eprintln!("  {}: {:#}", colors.emphasis("Error"), e);
     process::exit(1);
   }
 
