@@ -11,7 +11,8 @@ use std::io::{ErrorKind, Write as IoWrite};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use futures::future::try_join_all;
+use futures::future::join_all;
+use tracing::warn;
 
 use crate::asciidoc::{self, AsciiDocOptions};
 use crate::attachments::{self, ATTACHMENTS_DIR, DownloadedAttachment};
@@ -284,16 +285,21 @@ async fn fetch_images_from_attachments(
 
   let mut tasks = Vec::new();
   for image_ref in image_refs {
-    let attachment = attachments
-      .iter()
-      .find(|a| a.title == image_ref.filename)
-      .with_context(|| format!("Attachment not found: {}", image_ref.filename))?;
+    let Some(attachment) = attachments.iter().find(|a| a.title == image_ref.filename) else {
+      warn!(
+        "Skipping image '{}': no matching attachment was returned by Confluence",
+        image_ref.filename
+      );
+      continue;
+    };
 
-    let download_url = attachment
-      .links
-      .as_ref()
-      .and_then(|l| l.download.as_ref())
-      .with_context(|| format!("No download link for attachment: {}", image_ref.filename))?;
+    let Some(download_url) = attachment.links.as_ref().and_then(|l| l.download.as_ref()) else {
+      warn!(
+        "Skipping image '{}': attachment has no download link",
+        image_ref.filename
+      );
+      continue;
+    };
 
     let safe_filename = sanitize_asset_filename(&image_ref.filename);
     let relative_path = PathBuf::from(images_subdir).join(&safe_filename);
@@ -316,7 +322,9 @@ async fn fetch_images_from_attachments(
     }
   }
 
-  // Phase 2: Fetch all needed images concurrently
+  // Phase 2: Fetch all needed images concurrently. Individual failures are
+  // reported as warnings (with the full error chain) but do not abort the
+  // export — partial output is more useful than no output.
   let fetch_futures: Vec<_> = tasks
     .iter()
     .map(|task| {
@@ -324,19 +332,21 @@ async fn fetch_images_from_attachments(
       let filename = task.image_filename.clone();
       let path = task.relative_path.clone();
       async move {
-        let bytes = client
-          .fetch_attachment(&url)
-          .await
-          .with_context(|| format!("Failed to fetch image: {filename}"))?;
-        Ok::<_, anyhow::Error>(AssetData {
-          relative_path: path,
-          content: bytes,
-        })
+        match client.fetch_attachment(&url).await {
+          Ok(bytes) => Some(AssetData {
+            relative_path: path,
+            content: bytes,
+          }),
+          Err(err) => {
+            warn!("Failed to fetch image '{filename}': {err:#}");
+            None
+          }
+        }
       }
     })
     .collect();
 
-  let assets = try_join_all(fetch_futures).await?;
+  let assets = join_all(fetch_futures).await.into_iter().flatten().collect();
 
   Ok((assets, filename_map))
 }
@@ -415,7 +425,9 @@ async fn fetch_attachments_from_list(
     }
   }
 
-  // Phase 2: Fetch all needed attachments concurrently
+  // Phase 2: Fetch all needed attachments concurrently. Individual failures
+  // are reported as warnings (with the full error chain) but do not abort the
+  // export — partial output is more useful than no output.
   let fetch_futures: Vec<_> = tasks
     .iter()
     .map(|task| {
@@ -423,19 +435,21 @@ async fn fetch_attachments_from_list(
       let name = task.original_name.clone();
       let path = task.relative_path.clone();
       async move {
-        let bytes = client
-          .fetch_attachment(&url)
-          .await
-          .with_context(|| format!("Failed to fetch attachment: {name}"))?;
-        Ok::<_, anyhow::Error>(AssetData {
-          relative_path: path,
-          content: bytes,
-        })
+        match client.fetch_attachment(&url).await {
+          Ok(bytes) => Some(AssetData {
+            relative_path: path,
+            content: bytes,
+          }),
+          Err(err) => {
+            warn!("Failed to fetch attachment '{name}': {err:#}");
+            None
+          }
+        }
       }
     })
     .collect();
 
-  let assets = try_join_all(fetch_futures).await?;
+  let assets = join_all(fetch_futures).await.into_iter().flatten().collect();
 
   Ok((assets, downloaded_info))
 }
@@ -657,5 +671,160 @@ mod tests {
     assert_eq!(next_candidate("file", "txt", 1), "file-1.txt");
     assert_eq!(next_candidate("file", "txt", 2), "file-2.txt");
     assert_eq!(next_candidate("file", "", 1), "file-1");
+  }
+
+  mod resilience {
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+
+    use anyhow::{Result, anyhow};
+    use async_trait::async_trait;
+
+    use super::*;
+    use crate::confluence::{Attachment, AttachmentLinks, ConfluenceApi, Page, UserInfo};
+
+    /// Fake client where individual attachment fetches can be configured to
+    /// fail by URL.
+    struct PartialFailClient {
+      fail_urls: HashSet<String>,
+      attempted: Mutex<Vec<String>>,
+    }
+
+    impl PartialFailClient {
+      fn new(fail_urls: impl IntoIterator<Item = String>) -> Self {
+        Self {
+          fail_urls: fail_urls.into_iter().collect(),
+          attempted: Mutex::new(Vec::new()),
+        }
+      }
+    }
+
+    #[async_trait]
+    impl ConfluenceApi for PartialFailClient {
+      async fn get_page(&self, _page_id: &str) -> Result<Page> {
+        Err(anyhow!("not used in this test"))
+      }
+
+      async fn get_child_pages(&self, _page_id: &str) -> Result<Vec<Page>> {
+        Ok(Vec::new())
+      }
+
+      async fn get_attachments(&self, _page_id: &str) -> Result<Vec<Attachment>> {
+        Ok(Vec::new())
+      }
+
+      async fn download_attachment(&self, _url: &str, _output_path: &Path) -> Result<()> {
+        Err(anyhow!("not used in this test"))
+      }
+
+      async fn fetch_attachment(&self, url: &str) -> Result<Vec<u8>> {
+        self.attempted.lock().unwrap().push(url.to_string());
+        if self.fail_urls.contains(url) {
+          Err(anyhow!("Failed to fetch attachment from {url}: 403 Forbidden"))
+        } else {
+          Ok(format!("bytes for {url}").into_bytes())
+        }
+      }
+
+      async fn test_auth(&self) -> Result<UserInfo> {
+        Err(anyhow!("not used in this test"))
+      }
+    }
+
+    fn make_attachment(title: &str, download_url: &str) -> Attachment {
+      Attachment {
+        id: format!("id-{title}"),
+        title: title.to_string(),
+        attachment_type: "attachment".to_string(),
+        media_type: None,
+        file_size: None,
+        links: Some(AttachmentLinks {
+          download: Some(download_url.to_string()),
+        }),
+      }
+    }
+
+    #[tokio::test]
+    async fn attachment_fetch_failure_skips_only_that_attachment() {
+      let client = PartialFailClient::new(["https://example.com/bad".to_string()]);
+
+      let attachments = vec![
+        make_attachment("good1.txt", "https://example.com/good1"),
+        make_attachment("missing.bin", "https://example.com/bad"),
+        make_attachment("good2.txt", "https://example.com/good2"),
+      ];
+
+      let (assets, info) = fetch_attachments_from_list(&client, &attachments, None, None, true)
+        .await
+        .expect("export must continue despite per-attachment failure");
+
+      assert_eq!(assets.len(), 2, "only successful fetches should be returned");
+      assert_eq!(info.len(), 3, "link rewrite info should include every attachment");
+
+      let names: HashSet<String> = assets
+        .iter()
+        .map(|a| a.relative_path.file_name().unwrap().to_string_lossy().to_string())
+        .collect();
+      assert!(names.contains("good1.txt"));
+      assert!(names.contains("good2.txt"));
+      assert!(!names.contains("missing.bin"));
+    }
+
+    #[tokio::test]
+    async fn image_fetch_failure_skips_only_that_image() {
+      let client = PartialFailClient::new(["https://example.com/bad-img".to_string()]);
+
+      let attachments = vec![
+        make_attachment("a.png", "https://example.com/a"),
+        make_attachment("b.png", "https://example.com/bad-img"),
+      ];
+      let image_refs = vec![
+        ImageReference {
+          filename: "a.png".to_string(),
+          alt_text: String::new(),
+        },
+        ImageReference {
+          filename: "b.png".to_string(),
+          alt_text: String::new(),
+        },
+      ];
+
+      let (assets, filename_map) =
+        fetch_images_from_attachments(&client, &attachments, &image_refs, "images", None, true)
+          .await
+          .expect("export must continue despite per-image failure");
+
+      assert_eq!(assets.len(), 1, "only successful image fetches should be returned");
+      assert_eq!(
+        filename_map.len(),
+        2,
+        "link rewrite map should include every referenced image so links are not broken"
+      );
+    }
+
+    #[tokio::test]
+    async fn missing_image_attachment_is_skipped_not_fatal() {
+      let client = PartialFailClient::new([]);
+
+      let attachments = vec![make_attachment("present.png", "https://example.com/present")];
+      let image_refs = vec![
+        ImageReference {
+          filename: "present.png".to_string(),
+          alt_text: String::new(),
+        },
+        ImageReference {
+          filename: "ghost.png".to_string(),
+          alt_text: String::new(),
+        },
+      ];
+
+      let (assets, filename_map) =
+        fetch_images_from_attachments(&client, &attachments, &image_refs, "images", None, true)
+          .await
+          .expect("missing attachment ref must not be fatal");
+
+      assert_eq!(assets.len(), 1);
+      assert_eq!(filename_map.len(), 1, "ghost.png should not appear in the rewrite map");
+    }
   }
 }
